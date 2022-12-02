@@ -60,16 +60,10 @@ fun main() {
             .let { (a, b) -> maxOf(a.steps, b.steps) }
     }
 
-    fun part2(input: List<String>): Int {
-        return input.size
-    }
-
     // test
     val testInput = readInput("Day25_test")
     check(part1(testInput) == 58)
-    // check(part2(testInput) == 2758514936282235L)
 
     val input = readInput("Day25")
     println("Part 1: ${part1(input)}")
-    println("Part 2: ${part2(input)}")
 }

@@ -1,30 +1,27 @@
-data class Cuboid(val xRange: IntRange, val yRange: IntRange, val zRange: IntRange) {
-    fun isEmpty() = (xRange.isEmpty() || yRange.isEmpty() || zRange.isEmpty())
-    val volume = sequenceOf(xRange, yRange, zRange)
-        .fold(1L) { acc, range -> acc * maxOf(range.last - range.first + 1, 0) }
-}
-
-sealed class ReactorInstruction {
-    abstract val cuboid: Cuboid
-    data class On(override val cuboid: Cuboid) : ReactorInstruction()
-    data class Off(override val cuboid: Cuboid) : ReactorInstruction()
-}
-
 fun main() {
+
+    data class Cuboid(val xRange: IntRange, val yRange: IntRange, val zRange: IntRange)
+    data class ReactorInstruction(val isOn: Boolean, val cuboid: Cuboid)
 
     fun parseInput(input: List<String>): List<ReactorInstruction> {
         val regex = "(on|off) x=(-?\\d+)\\.\\.(-?\\d+),y=(-?\\d+)\\.\\.(-?\\d+),z=(-?\\d+)\\.\\.(-?\\d+)".toRegex()
         return input
             .mapNotNull { regex.matchEntire(it.trim())?.groupValues }
             .map { gv ->
-                val cuboid = Cuboid(
-                    xRange = (gv[2].toInt() .. gv[3].toInt()),
-                    yRange = (gv[4].toInt() .. gv[5].toInt()),
-                    zRange = (gv[6].toInt() .. gv[7].toInt()),
+                ReactorInstruction(
+                    isOn = gv[1] == "on",
+                    cuboid = Cuboid(
+                        xRange = (gv[2].toInt() .. gv[3].toInt()),
+                        yRange = (gv[4].toInt() .. gv[5].toInt()),
+                        zRange = (gv[6].toInt() .. gv[7].toInt()),
+                    ),
                 )
-                if (gv[1] == "on") ReactorInstruction.On(cuboid) else ReactorInstruction.Off(cuboid)
             }
     }
+
+    fun Cuboid.isEmpty() = xRange.isEmpty() || yRange.isEmpty() || zRange.isEmpty()
+    fun Cuboid.volume() = sequenceOf(xRange, yRange, zRange)
+        .fold(1L) { acc, range -> acc * maxOf(range.last - range.first + 1, 0) }
 
     infix fun IntRange.intersect(other: IntRange) =
         (maxOf(this.first, other.first) .. minOf(this.last, other.last))
@@ -40,7 +37,7 @@ fun main() {
         val newCuboidCounts = this.entries
             .asSequence()
             .map { (cuboid, count) -> (cuboid intersect instruction.cuboid) to -count }
-            .plus(if (instruction is ReactorInstruction.On) listOf(instruction.cuboid to 1) else emptyList())
+            .plus(if (instruction.isOn) listOf(instruction.cuboid to 1) else emptyList())
         return (this.entries.asSequence().map { (c, n) -> c to n } + newCuboidCounts)
             .groupBy({ it.first }) { it.second }
             .mapValues { (_, counts) -> counts.sum() }
@@ -51,15 +48,18 @@ fun main() {
         return this
             .fold(emptyMap<Cuboid, Int>()) { state, instruction -> state.apply(instruction) }
             .asIterable()
-            .sumOf { (cuboid, count) -> cuboid.volume * count }
+            .sumOf { (cuboid, count) -> cuboid.volume() * count }
     }
 
     fun part1(input: List<String>): Long {
-        return parseInput(input).takeWhile { it.cuboid.volume < 100 * 100 * 100 }.calculateFinalVolume()
+        return parseInput(input)
+            .takeWhile { it.cuboid.volume() < 100 * 100 * 100 }
+            .calculateFinalVolume()
     }
 
     fun part2(input: List<String>): Long {
-        return parseInput(input).calculateFinalVolume()
+        return parseInput(input)
+            .calculateFinalVolume()
     }
 
     // test

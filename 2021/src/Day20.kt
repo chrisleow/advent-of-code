@@ -88,14 +88,4 @@ fun main() {
     val input = readInput("Day20")
     println("Part 1: ${part1(input)}")
     println("Part 2: ${part2(input)}")
-
-//    run {
-//        val lifeInput = readInput("Day20_life")
-//        generateSequence(parseInput(lifeInput)) { it.next() }.forEach { state ->
-//            println(state.toDebugString())
-//            println()
-//            println()
-//            Thread.sleep(500L)
-//        }
-//    }
 }

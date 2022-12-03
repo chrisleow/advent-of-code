@@ -3,207 +3,171 @@ import kotlin.math.abs
 
 fun main() {
 
-    // note that empty positions are marked as empty chars, and an amphipod is marked in capitals
-    // to indicate it's moved.
-    data class State(val rooms: Map<Int, String>, val hallway: String)
-    data class Solution(val path: List<State>, val cost: Int)
+    data class Point(val x: Int, val y: Int)
+    data class Move(val char: Char, val cost: Int, val start: Point, val end: Point)
+    data class State(val charMap: Map<Point, Char>, val cost: Int, val previous: State?)
 
-    fun State.toDebugString() = buildString {
-        val state = this@toDebugString
-        val length = state.hallway.length + 2
+    val homeChars = mapOf(3 to 'A', 5 to 'B', 7 to 'C', 9 to 'D')
+    val unitCosts = mapOf('A' to 1, 'B' to 10, 'C' to 100, 'D' to 1000)
 
-        // room positions
-        val roomDisplayPositions = state.rooms.keys.flatMap { (it - 1 .. it + 1) }.toSet()
+    fun List<String>.parseInput() = this
+        .filter { it.isNotBlank() }
+        .flatMapIndexed { y, line -> line.mapIndexed { x, char -> Point(x, y) to char } }
+        .filter { (_, c) -> c != ' ' }
+        .toMap()
 
-        // print out
-        (0 until length).forEach { append("#") }; appendLine()
-        append("#"); append(state.hallway); appendLine("#")
-        (0 until rooms.values.maxOf { it.length }).forEach { depth ->
-            (0 until length).forEach { pos ->
-                append(
-                    rooms[pos - 1]
-                        ?.get(depth)
-                        ?.uppercaseChar()
-                        ?: (if (depth == 0 || pos - 1 in roomDisplayPositions) '#' else ' ')
-                )
+    fun Map<Point, Char>.toDebugString(): String {
+        val map = this
+        val maxX = map.keys.maxOf { it.x }
+        val maxY = map.keys.maxOf { it.y }
+        return buildString {
+            (0 .. maxY).forEach { y ->
+                val line = (0 .. maxX)
+                    .map { x -> map[Point(x, y)] ?: ' ' }
+                    .joinToString("")
+                    .trimEnd()
+                appendLine(line)
             }
-            appendLine()
         }
-        (0 until length).forEach { if (it - 1 in roomDisplayPositions) append("#") else append(" ") }
-        appendLine()
     }
 
-    fun Solution.toDebugString() = buildString {
-        path.forEach { appendLine(it.toDebugString()) }
-        appendLine(">>> Cost: $cost")
-    }
+    fun Map<Point, Char>.isWinner() = this.entries
+        .filter { (_, c) -> c in setOf('A', 'B', 'C', 'D') }
+        .all { (p, c) -> p.y > 1 && homeChars[p.x] == c }
 
-    fun Char.getCostMultiplier(): Int = when (this.uppercaseChar()) {
-        'A' -> 1
-        'B' -> 10
-        'C' -> 100
-        'D' -> 1000
-        else -> error("not a valid amphipod")
-    }
+    fun Map<Point, Char>.getMoves(): Sequence<Move> {
+        val charMap = this
 
-    fun Char.getHomePosition(): Int = when (this.uppercaseChar()) {
-        'A' -> 2
-        'B' -> 4
-        'C' -> 6
-        'D' -> 8
-        else -> error("not a valid amphipod")
-    }
-
-    fun parseInput(input: List<String>): State {
-        val charLines = input
-            .map { line -> line.filter { it in "ABCD" } }
-            .filter { it.isNotEmpty() }
-        return State(
-            hallway = (0 .. 10).joinToString("") { "." },
-            rooms = "ABCD"
-                .mapIndexed { index, char -> char to charLines.joinToString("") { it[index].toString() } }
-                .associate { (char, room) -> char.getHomePosition() to room.lowercase() }
-        )
-    }
-
-    fun <T> List<T>.replaceAt(replacement: T, index: Int) = this
-        .mapIndexed { pos, item -> if (pos == index) replacement else item }
-
-    fun String.replaceAt(replacement: Char, index: Int) = this
-        .toList()
-        .replaceAt(replacement, index)
-        .joinToString("") { it.toString() }
-
-    // make a move (assuming move is legitimate to make)
-    fun State.moveToHallway(roomPosition: Int, hallwayPosition: Int): Pair<State, Int>? {
-        val room = rooms[roomPosition]
-            ?: return null
-        val (depth, typeChar) = room.withIndex().firstOrNull { (_, char) -> char != '.' }
-            ?: return null
-
-        // can't move an already moved amphipod
-        if (typeChar.isUpperCase()) {
-            return null
-        }
-
-        // check for a clear path
-        val minPosition = minOf(hallwayPosition, roomPosition)
-        val maxPosition = maxOf(hallwayPosition, roomPosition)
-        if ((minPosition .. maxPosition).any { hallway[it] != '.' }) {
-            return null
-        }
-
-        // attempt to make a move
-        val distance = abs(roomPosition - hallwayPosition) + depth + 1
-        val state = State(
-            rooms = rooms + (roomPosition to room.replaceAt('.', depth)),
-            hallway = hallway.replaceAt(typeChar.uppercaseChar(), hallwayPosition),
-        )
-        return Pair(state, distance * typeChar.getCostMultiplier())
-    }
-
-    fun State.moveToRoom(hallwayPosition: Int): Pair<State, Int>? {
-        val typeChar = when (val char = hallway[hallwayPosition]) {
-            '.' -> return null
-            else -> char
-        }
-        val roomPosition = typeChar.getHomePosition()
-        val room = rooms[roomPosition] ?: return null
-        val depth = room.indices.lastOrNull { room[it] == '.' } ?: return null
-
-        // check for a clear path
-        val minPosition = minOf(hallwayPosition, roomPosition)
-        val maxPosition = maxOf(hallwayPosition, roomPosition)
-        if ((minPosition .. maxPosition).any { it != hallwayPosition && hallway[it] != '.' }) {
-            return null
-        }
-
-        // attempt to make a move
-        val distance = abs(roomPosition - hallwayPosition) + depth + 1
-        val state = State(
-            rooms = rooms + (roomPosition to room.replaceAt(typeChar.uppercaseChar(), depth)),
-            hallway = hallway.replaceAt('.', hallwayPosition),
-        )
-        return Pair(state, distance * typeChar.getCostMultiplier())
-    }
-
-    fun State.nextMoves(): Sequence<Pair<State, Int>> = sequence {
-
-        // examine room -> hallway for existing rooms
-        rooms.keys.forEach { roomPosition ->
-
-            // go left (only if there's nothing in the way)
-            (roomPosition downTo 0)
-                .filter { pos -> pos !in rooms.keys }
-                .map { pos -> moveToHallway(roomPosition, pos) }
-                .takeWhile { it != null }
-                .forEach { yield(it!!) }
-
-            // go right (only if there's nothing in the way)
-            (roomPosition until hallway.length)
-                .filter { pos -> pos !in rooms.keys }
-                .map { pos -> moveToHallway(roomPosition, pos) }
-                .takeWhile { it != null }
-                .forEach { yield(it!!) }
-        }
-
-        // examine hallway -> room for moves
-        hallway.indices
-            .mapNotNull { pos -> moveToRoom(pos) }
-            .forEach { yield(it) }
-    }
-
-    fun State.isSolution(): Boolean {
-        val conditions = listOf(
-            hallway.all { it == '.' },
-            rooms.all { (pos, room) -> room.all { it != '.' && it.getHomePosition() == pos } },
-        )
-        return conditions.all { it }
-    }
-
-    fun State.solve(): Solution {
-        val backPointers = mutableMapOf<State, State>()
-        val costs = mutableMapOf(this to 0)
-        val queue = PriorityQueue<Pair<Int, State>>(compareBy { it.first }).also { it.add(0 to this) }
-        while (true) {
-            val (costSoFar, state) = queue.remove() ?: error("no more states to search")
-            if (state.isSolution()) {
-                return Solution(
-                    cost = costSoFar,
-                    path = generateSequence(state) { backPointers[it] }.asIterable().reversed(),
-                )
-            }
-
-            state.nextMoves().forEach { (nextState, cost) ->
-                if (costSoFar + cost < (costs[nextState] ?: Int.MAX_VALUE)) {
-                    costs[nextState] = costSoFar + cost
-                    backPointers[nextState] = state
-                    queue.add(costSoFar + cost to nextState)
+        // get the destination points where possible
+        val destinationPointsByChar = charMap.entries
+            .groupBy { (p, _) -> p.x }
+            .filter { (x, _) -> x in homeChars.keys }
+            .mapNotNull { (x, pointCharEntries) ->
+                val homeChar = homeChars[x] ?: return@mapNotNull null
+                if (pointCharEntries.all { (_, c) -> c == '#' || c == '.' || c == homeChar }) {
+                    val maxEmptyY = pointCharEntries
+                        .filter { (_, c) -> c == '.' }
+                        .maxOf { (p, _) -> p.y }
+                    Pair(homeChar, Point(x, maxEmptyY))
+                } else {
+                    null
                 }
             }
-        }
-    }
+            .toMap()
 
-    fun part1(input: List<String>): Int {
-        return parseInput(input).solve().cost
-    }
+        return charMap.entries
+            .asSequence()
+            .filter { (_, c) -> c in setOf('A', 'B', 'C', 'D') }
+            .flatMap { (point, char) ->
+                fun getCost(p: Point) = unitCosts[char]!! * (abs(point.x - p.x) + abs(point.y - p.y))
 
-    fun part2(input: List<String>): Int {
-        val interpolated = mapOf(2 to "DD", 4 to "CB", 6 to "BA", 8 to "AC")
-        val inputState = parseInput(input)
-        val state = inputState.copy(
-            rooms = inputState.rooms.mapValues { (pos, room) ->
-                "${room[0]}${interpolated[pos]?.lowercase()}${room[1]}"
+                // on the "home row", want to move to the destination row (if home row is clear)
+                if (point.y == 1) {
+                    val destination = destinationPointsByChar[char] ?: return@flatMap emptySequence()
+                    val xRange = minOf(point.x, destination.x) .. maxOf(point.x, destination.x)
+                    return@flatMap if (!xRange.all { x -> x == point.x || charMap[Point(x, 1)] == '.' }) {
+                        emptySequence()
+                    } else {
+                        sequenceOf(Move(char, getCost(destination), point, destination))
+                    }
+                }
+
+                // can't get to home row, no moves
+                if ((1 until point.y).any { y -> this[point.copy(y = y)] != '.' }) {
+                    return@flatMap emptySequence()
+                }
+
+                // walk backwards and forwards to get to home row location
+                return@flatMap sequence {
+                    yieldAll(
+                        generateSequence(point.x) { x -> x - 1 }
+                            .takeWhile { x -> charMap[Point(x, 1)] == '.' }
+                            .filter { x -> x !in homeChars.keys }
+                            .map { x -> Move(char, getCost(Point(x, 1)), point, Point(x, 1))}
+                    )
+                    yieldAll(
+                        generateSequence(point.x) { x -> x + 1 }
+                            .takeWhile { x -> charMap[Point(x, 1)] == '.' }
+                            .filter { x -> x !in homeChars.keys }
+                            .map { x -> Move(char, getCost(Point(x, 1)), point, Point(x, 1)) }
+                    )
+                }
             }
-        )
-        return state.solve().cost
     }
+
+    fun Map<Point, Char>.getCost(printWinnerTrail: Boolean): Int {
+        val seenCharMaps = mutableSetOf<Map<Point, Char>>()
+        val queue = PriorityQueue<State>(compareBy { it.cost })
+        queue.add(State(charMap = this, cost = 0, previous = null))
+
+        while (queue.isNotEmpty()) {
+            val state = queue.remove() ?: error("Should never get here.")
+            if (state.charMap in seenCharMaps) {
+                continue
+            }
+            if (state.charMap.isWinner()) {
+                if (printWinnerTrail) {
+                    val allPreviousStates = sequence {
+                        var current: State? = state
+                        while (current != null) {
+                            yield(current)
+                            current = current.previous
+                        }
+                    }
+
+                    allPreviousStates
+                        .toList()
+                        .reversed()
+                        .forEach { prevState ->
+                            println(prevState.charMap.toDebugString())
+                            println("  Cost: ${prevState.cost}")
+                            println()
+                        }
+                }
+                return state.cost
+            }
+
+            seenCharMaps.add(state.charMap)
+            state.charMap
+                .getMoves()
+                .forEach { move ->
+                    val newCharMapEntries = listOf(move.start to '.', move.end to move.char)
+                    queue.add(
+                        State(
+                            charMap = state.charMap + newCharMapEntries,
+                            cost = state.cost + move.cost,
+                            previous = state,
+                        )
+                    )
+                }
+        }
+
+        error("Completely run out of moves, shouldn't get here.")
+    }
+
+    fun part1(input: List<String>, printTrail: Boolean) = input
+        .parseInput()
+        .getCost(printTrail)
+
+    val part2ExtraLines = listOf(
+        "  #D#C#B#A#",
+        "  #D#B#A#C#",
+    )
+
+    fun part2(input: List<String>, printTrail: Boolean) = input
+        .let { ls -> ls.slice(0 .. 2) + part2ExtraLines + ls.slice(3 .. 4) }
+        .parseInput()
+        .getCost(printTrail)
 
     // test
     val testInput = readInput("Day23_test")
-    check(part1(testInput) == 12521)
+    check(part1(testInput, false) == 12521)
+    println("Checked Part 1 ... ok.")
+    check(part2(testInput, false) == 44169)
+    println("Checked Part 2 ... ok.")
 
     val input = readInput("Day23")
-    println("Part 1: ${part1(input)}")
-    println("Part 2: ${part2(input)}")
+    println("Part 1: ${part1(input, true)}")
+    println()
+    println("Part 2: ${part2(input, true)}")
 }

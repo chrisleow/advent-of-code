@@ -19,7 +19,7 @@ fun main() {
         }
 
     fun getOrientations(vectors: List<Vector>) = sequence {
-        val orderedPermutations = listOf<(Vector) -> Vector>(
+        val orderedPermutations = sequenceOf<(Vector) -> Vector>(
             { (x, y, z) -> Vector(x, y, z) },
             { (x, y, z) -> Vector(x, z, -y) },
             { (x, y, z) -> Vector(y, x, -z) },
@@ -27,7 +27,7 @@ fun main() {
             { (x, y, z) -> Vector(z, x, y) },
             { (x, y, z) -> Vector(z, y, -x) },
         )
-        orderedPermutations.map { transform ->
+        orderedPermutations.forEach { transform ->
             yield(vectors.map { v -> transform(v).let { (x, y, z) -> Vector(x, y, z) }})
             yield(vectors.map { v -> transform(v).let { (x, y, z) -> Vector(-x, -y, z) }})
             yield(vectors.map { v -> transform(v).let { (x, y, z) -> Vector(x, -y, -z) }})
@@ -44,19 +44,19 @@ fun main() {
                 .toSet()
         }
 
-        tailrec fun resolve(knownOrientedVectorSets: Map<Int, OrientedVectorSet>): List<OrientedVectorSet> {
-            if (knownOrientedVectorSets.size == size) {
-                return knownOrientedVectorSets.entries
+        tailrec fun resolve(resolvedVectorSets: Map<Int, OrientedVectorSet>): List<OrientedVectorSet> {
+            if (resolvedVectorSets.size == size) {
+                return resolvedVectorSets.entries
                     .sortedBy { it.key }
                     .map { it.value }
             }
 
-            // find first pair where there's almost certainly a match
-            val (resolvedIndex, unresolvedIndex) = unresolvedScannerVectors.indices
-                .filter { it !in knownOrientedVectorSets }
-                .firstNotNullOf { unresolvedIndex ->
+            val newResolvedOrientedVectorSetEntry = unresolvedScannerVectors.indices
+                .asSequence()
+                .filter { it !in resolvedVectorSets }
+                .flatMap { unresolvedIndex ->
                     val relativeDistances = relativeDistancesByScanner[unresolvedIndex]
-                    knownOrientedVectorSets.keys.firstNotNullOfOrNull { resolvedIndex ->
+                    resolvedVectorSets.keys.mapNotNull { resolvedIndex ->
                         val resolvedRelativeDistances = relativeDistancesByScanner[resolvedIndex]
                         if ((relativeDistances intersect resolvedRelativeDistances).size >= 66) {
                             Pair(resolvedIndex, unresolvedIndex)
@@ -65,47 +65,60 @@ fun main() {
                         }
                     }
                 }
+                .flatMap { (resolvedIndex, unresolvedIndex) ->
+                    val resolvedVectors = resolvedVectorSets[resolvedIndex]?.vectors
+                        ?: error("Bad Index")
 
-            // check all orientations
-            val knownVectors = knownOrientedVectorSets[resolvedIndex]?.vectors ?: error("Bad Index")
-            val newOrientedVectorSet = getOrientations(this[unresolvedIndex])
-                .firstNotNullOf { orientedVectors ->
-                    val displacementCounts = knownVectors
-                        .flatMap { known ->
-                            orientedVectors.map { vector ->
-                                Vector(known.x - vector.x, known.y - vector.y, known.z - vector.z)
+                    getOrientations(this[unresolvedIndex]).flatMap { orientedVectors ->
+                        resolvedVectors
+                            .flatMap { resolved ->
+                                orientedVectors.map { vector ->
+                                    Vector(
+                                        x = resolved.x - vector.x,
+                                        y = resolved.y - vector.y,
+                                        z = resolved.z - vector.z,
+                                    )
+                                }
                             }
-                        }
-                        .groupingBy { it }
-                        .eachCount()
-                    val (displacement, maxCount) = displacementCounts.entries
-                        .maxBy { (_, count) -> count }
+                            .groupingBy { it }
+                            .eachCount()
+                            .asSequence()
+                            .filter { (_, count) -> count >= 12 }
+                            .map { (displacement, _) ->
+                                val newOrientedVectorSet = OrientedVectorSet(
+                                    displacement = displacement,
+                                    vectors = orientedVectors.map {
+                                        Vector(
+                                            x = it.x + displacement.x,
+                                            y = it.y + displacement.y,
+                                            z = it.z + displacement.z,
+                                        )
+                                    },
+                                )
 
-                    if (maxCount >= 12) {
-                        OrientedVectorSet(
-                            displacement = displacement,
-                            vectors = orientedVectors.map {
-                                Vector(it.x + displacement.x, it.y + displacement.y, it.z + displacement.z)
-                            },
-                        )
-                    } else {
-                        null
+                                // new resolved vector set
+                                Pair(unresolvedIndex, newOrientedVectorSet)
+                            }
                     }
                 }
+                .firstOrNull()
+                ?: error("Cannot find anything else to resolve against, quitting here.")
 
-            return resolve(knownOrientedVectorSets + (unresolvedIndex to newOrientedVectorSet))
+            return resolve(resolvedVectorSets + newResolvedOrientedVectorSetEntry)
         }
 
         val initialVectorSet = OrientedVectorSet(Vector(0, 0, 0), this[0])
         return resolve(mapOf(0 to initialVectorSet))
     }
 
-    fun part1(input: List<String>) = readInput(input).resolveScanners()
+    fun part1(input: List<String>) = readInput(input)
+        .resolveScanners()
         .flatMap { it.vectors }
         .distinct()
         .count()
 
-    fun part2(input: List<String>) = readInput(input).resolveScanners()
+    fun part2(input: List<String>) = readInput(input)
+        .resolveScanners()
         .map { it.displacement }
         .zipAll()
         .maxOf { (v1, v2) -> abs(v1.x - v2.x) + abs(v1.y - v2.y) + abs(v1.z - v2.z) }

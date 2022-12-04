@@ -18,7 +18,7 @@ fun main() {
 
     val digitsByLength = digits.groupBy { it.chars.count() }
 
-    fun parseInput(input: List<String>): List<InputLine> = input
+    fun getInputLines(input: List<String>): List<InputLine> = input
         .filter { it.isNotBlank() && "|" in it }
         .map { line ->
             line.split("|")
@@ -59,7 +59,7 @@ fun main() {
         }
         .fold(0) { acc, digit -> (acc * 10) + digit }
 
-    fun part1(input: List<String>) = parseInput(input)
+    fun part1(input: List<String>) = getInputLines(input)
         .map { inputLine ->
             inputLine.signalPatterns
                 .inferMapping()
@@ -68,7 +68,7 @@ fun main() {
         }
         .sumOf { output -> output.count { it in "1478" } }
 
-    fun part2(input: List<String>) = parseInput(input)
+    fun part2(input: List<String>) = getInputLines(input)
         .sumOf { inputLine ->
             inputLine.signalPatterns
                 .inferMapping()

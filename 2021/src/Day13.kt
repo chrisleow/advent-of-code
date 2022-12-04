@@ -51,7 +51,9 @@ fun main() {
     }
 
     fun part1(input: List<String>) = parseState(input).next()?.points?.size ?: 0
-    fun part2(input: List<String>) = generateSequence(parseState(input)) { it.next() }.last().toDisplayString()
+    fun part2(input: List<String>) = generateSequence(parseState(input)) { it.next() }
+        .last()
+        .toDisplayString()
 
     // test if implementation meets criteria from the description, like:
     val testInput = readInput("Day13_test")

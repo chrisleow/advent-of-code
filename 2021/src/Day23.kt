@@ -4,10 +4,10 @@ import kotlin.math.abs
 fun main() {
 
     data class Point(val x: Int, val y: Int)
-    data class Move(val char: Char, val cost: Int, val start: Point, val end: Point)
-    data class State(val charMap: Map<Point, Char>, val cost: Int, val previous: State?)
+    data class State(val charMap: Map<Point, Char>, val cost: Int, val heuristicCost: Int, val previous: State?)
 
     val homeChars = mapOf(3 to 'A', 5 to 'B', 7 to 'C', 9 to 'D')
+    val homeXs = mapOf('A' to 3, 'B' to 5, 'C' to 7, 'D' to 9)
     val unitCosts = mapOf('A' to 1, 'B' to 10, 'C' to 100, 'D' to 1000)
 
     fun List<String>.parseInput() = this
@@ -16,30 +16,55 @@ fun main() {
         .filter { (_, c) -> c != ' ' }
         .toMap()
 
-    fun Map<Point, Char>.toDebugString(): String {
-        val map = this
-        val maxX = map.keys.maxOf { it.x }
-        val maxY = map.keys.maxOf { it.y }
+    fun State.toDebugString(): String {
+        val state = this
+        val maxX = state.charMap.keys.maxOf { it.x }
+        val maxY = state.charMap.keys.maxOf { it.y }
         return buildString {
             (0 .. maxY).forEach { y ->
                 val line = (0 .. maxX)
-                    .map { x -> map[Point(x, y)] ?: ' ' }
+                    .map { x -> state.charMap[Point(x, y)] ?: ' ' }
                     .joinToString("")
                     .trimEnd()
                 appendLine(line)
             }
+            appendLine("Cost: ${state.cost} [Heuristic Cost: ${state.heuristicCost}]")
         }
     }
 
-    fun Map<Point, Char>.isWinner() = this.entries
+    fun Pair<Int, Int>.distanceOutsideRange(other: Int) = minOf(
+        if (other in first..second) 0 else Int.MAX_VALUE,
+        if (other in second .. first) 0 else Int.MAX_VALUE,
+        abs(other - first),
+        abs(other - second),
+    )
+
+    fun State.isWinner() = this.charMap.entries
         .filter { (_, c) -> c in setOf('A', 'B', 'C', 'D') }
         .all { (p, c) -> p.y > 1 && homeChars[p.x] == c }
 
-    fun Map<Point, Char>.getMoves(): Sequence<Move> {
-        val charMap = this
+    fun State.move(source: Point, target: Point): State {
+        val distance = abs(source.x - target.x) + abs(source.y - target.y)
+        val char = this.charMap[source] ?: error("can only move an amphipod.")
+
+        // heuristic cost is only the extra distance we DON'T absolutely need to travel if
+        // every amphipod follows its ideal trajectory
+        val extraDistance = Pair(source.x, homeXs[char]!!).distanceOutsideRange(target.x)
+
+        // update state
+        return State(
+            charMap = this.charMap + listOf(source to '.', target to char),
+            cost = this.cost + (unitCosts[char]!! * distance),
+            heuristicCost = this.heuristicCost + (unitCosts[char]!! * extraDistance),
+            previous = this,
+        )
+    }
+
+    fun State.getMoves(): Sequence<State> {
+        val state = this
 
         // get the destination points where possible
-        val destinationPointsByChar = charMap.entries
+        val destinationPointsByChar = state.charMap.entries
             .groupBy { (p, _) -> p.x }
             .filter { (x, _) -> x in homeChars.keys }
             .mapNotNull { (x, pointCharEntries) ->
@@ -55,11 +80,10 @@ fun main() {
             }
             .toMap()
 
-        return charMap.entries
+        return this.charMap.entries
             .asSequence()
             .filter { (_, c) -> c in setOf('A', 'B', 'C', 'D') }
             .flatMap { (point, char) ->
-                fun getCost(p: Point) = unitCosts[char]!! * (abs(point.x - p.x) + abs(point.y - p.y))
 
                 // on the "home row", want to move to the destination row (if home row is clear)
                 if (point.y == 1) {
@@ -68,12 +92,12 @@ fun main() {
                     return@flatMap if (!xRange.all { x -> x == point.x || charMap[Point(x, 1)] == '.' }) {
                         emptySequence()
                     } else {
-                        sequenceOf(Move(char, getCost(destination), point, destination))
+                        sequenceOf(state.move(point, destination))
                     }
                 }
 
-                // can't get to home row, no moves
-                if ((1 until point.y).any { y -> this[point.copy(y = y)] != '.' }) {
+                // can't get to home row, no moves for this pod out of home row
+                if ((1 until point.y).any { y -> state.charMap[point.copy(y = y)] != '.' }) {
                     return@flatMap emptySequence()
                 }
 
@@ -83,13 +107,13 @@ fun main() {
                         generateSequence(point.x) { x -> x - 1 }
                             .takeWhile { x -> charMap[Point(x, 1)] == '.' }
                             .filter { x -> x !in homeChars.keys }
-                            .map { x -> Move(char, getCost(Point(x, 1)), point, Point(x, 1))}
+                            .map { x -> state.move(point, Point(x, 1)) }
                     )
                     yieldAll(
                         generateSequence(point.x) { x -> x + 1 }
                             .takeWhile { x -> charMap[Point(x, 1)] == '.' }
                             .filter { x -> x !in homeChars.keys }
-                            .map { x -> Move(char, getCost(Point(x, 1)), point, Point(x, 1)) }
+                            .map { x -> state.move(point, Point(x, 1)) }
                     )
                 }
             }
@@ -97,15 +121,12 @@ fun main() {
 
     fun Map<Point, Char>.getCost(printWinnerTrail: Boolean): Int {
         val seenCharMaps = mutableSetOf<Map<Point, Char>>()
-        val queue = PriorityQueue<State>(compareBy { it.cost })
-        queue.add(State(charMap = this, cost = 0, previous = null))
+        val queue = PriorityQueue<State>(compareBy { it.heuristicCost })
+        queue.add(State(charMap = this, cost = 0, heuristicCost = 0, previous = null))
 
         while (queue.isNotEmpty()) {
             val state = queue.remove() ?: error("Should never get here.")
-            if (state.charMap in seenCharMaps) {
-                continue
-            }
-            if (state.charMap.isWinner()) {
+            if (state.isWinner()) {
                 if (printWinnerTrail) {
                     val allPreviousStates = sequence {
                         var current: State? = state
@@ -119,7 +140,7 @@ fun main() {
                         .toList()
                         .reversed()
                         .forEach { prevState ->
-                            println(prevState.charMap.toDebugString())
+                            println(prevState.toDebugString())
                             println("  Cost: ${prevState.cost}")
                             println()
                         }
@@ -127,19 +148,12 @@ fun main() {
                 return state.cost
             }
 
+            if (state.charMap in seenCharMaps) {
+                continue
+            }
+
             seenCharMaps.add(state.charMap)
-            state.charMap
-                .getMoves()
-                .forEach { move ->
-                    val newCharMapEntries = listOf(move.start to '.', move.end to move.char)
-                    queue.add(
-                        State(
-                            charMap = state.charMap + newCharMapEntries,
-                            cost = state.cost + move.cost,
-                            previous = state,
-                        )
-                    )
-                }
+            state.getMoves().forEach { queue.add(it) }
         }
 
         error("Completely run out of moves, shouldn't get here.")

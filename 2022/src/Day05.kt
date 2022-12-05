@@ -29,39 +29,27 @@ fun main() {
         return Pair(initialStacks, instructions)
     }
 
-    fun Map<Int, String>.apply9000(instruction: Instruction) = this.mapValues { (index, stack) ->
-        when (index) {
-            instruction.source -> {
-                stack.substring(instruction.count)
+    fun Map<Int, String>.apply(instruction: Instruction, model: Int) = this + listOf(
+        instruction.source to run {
+            (this[instruction.source] ?: error("Invalid index ${instruction.source}."))
+                .substring(instruction.count)
+        },
+        instruction.target to run {
+            val targetStack = (this[instruction.target] ?: error("Invalid index ${instruction.source}."))
+            val transferChars = (this[instruction.source] ?: error("Invalid index ${instruction.source}."))
+                .substring(0, instruction.count)
+            when (model) {
+                9000 -> transferChars.reversed() + targetStack
+                9001 -> transferChars + targetStack
+                else -> error("Unknown model number.")
             }
-            instruction.target -> {
-                val transferChars = (this[instruction.source] ?: error("shouldn't get here."))
-                    .substring(0 until instruction.count)
-                    .reversed()
-                transferChars + stack
-            }
-            else -> stack
         }
-    }
-
-    fun Map<Int, String>.apply9001(instruction: Instruction) = this.mapValues { (index, stack) ->
-        when (index) {
-            instruction.source -> {
-                stack.substring(instruction.count)
-            }
-            instruction.target -> {
-                val transferChars = (this[instruction.source] ?: error("shouldn't get here."))
-                    .substring(0 until instruction.count)
-                transferChars + stack
-            }
-            else -> stack
-        }
-    }
+    )
 
     fun part1(input: List<String>): String {
         val (initialStacks, instructions) = input.parse()
         return instructions
-            .fold(initialStacks) { stacks, instruction -> stacks.apply9000(instruction) }
+            .fold(initialStacks) { stacks, instruction -> stacks.apply(instruction, 9000) }
             .entries
             .sortedBy { it.key }
             .joinToString("") { it.value.first().toString() }
@@ -70,7 +58,7 @@ fun main() {
     fun part2(input: List<String>): String {
         val (initialStacks, instructions) = input.parse()
         return instructions
-            .fold(initialStacks) { stacks, instruction -> stacks.apply9001(instruction) }
+            .fold(initialStacks) { stacks, instruction -> stacks.apply(instruction, 9001) }
             .entries
             .sortedBy { it.key }
             .joinToString("") { it.value.first().toString() }

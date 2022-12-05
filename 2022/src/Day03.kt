@@ -10,7 +10,7 @@ fun main() {
         .asSequence()
         .filter { it.isNotBlank() }
         .map { it.trim() }
-        .map { Pair(it.substring(0 until (it.length / 2)), it.substring(it.length / 2)) }
+        .map { Pair(it.substring(0, it.length / 2), it.substring(it.length / 2)) }
         .map { (left, right) -> (left.toSet() intersect right.toSet()).single() }
         .sumOf { it.priority() }
 

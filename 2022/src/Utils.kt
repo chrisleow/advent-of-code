@@ -16,15 +16,6 @@ fun String.md5() = BigInteger(1, MessageDigest.getInstance("MD5").digest(toByteA
     .padStart(32, '0')
 
 /**
- * Zips a list with itself
- */
-fun <T> Iterable<T>.zipAll(): Iterable<Pair<T, T>> {
-    return this.flatMapIndexed { index, left ->
-        this.drop(index + 1).map { right -> Pair(left, right) }
-    }
-}
-
-/**
  * Split a sequence into sub-lists based on predicate
  */
 fun <T> Sequence<T>.split(predicate: (T) -> Boolean): Sequence<List<T>> {

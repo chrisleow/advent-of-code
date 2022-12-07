@@ -31,7 +31,7 @@ fun main() {
         .parse()
         .flatMap { nf -> (0 .. nf.path.size).map { size -> nf.copy(path = nf.path.take(size)) } }
         .groupingBy { nf -> nf.path }
-        .aggregate { _, size: Int?, nf, _ -> (size ?: 0) + (nf.size ?: 0) }
+        .aggregate { _, total: Int?, nf, _ -> (total ?: 0) + (nf.size ?: 0) }
         .filter { it.value <= 100000 }
         .values
         .sum()

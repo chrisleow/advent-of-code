@@ -39,11 +39,11 @@ fun main() {
             generateSequence(initial) { points -> points.map { next(it) } }
                 .takeWhile { points -> points.any { it in this.keys } }
                 .fold(emptyMap()) { map, points ->
-                    map + points.map { point ->
+                    map + points.associateWith { point ->
                         val prevValue = map[previous(point)]
                         val prevHeight = this[previous(point)]
                         val height = this[point] ?: error("shouldn't get here")
-                        point to block(prevHeight, height, prevValue)
+                        block(prevHeight, height, prevValue)
                     }
                 }
         }
@@ -63,23 +63,23 @@ fun main() {
         data class SweepState(
             val distance: Int,
             val distanceToEdge: Int,
-            val previousHeightDistances: Map<Int, Int>,
+            val distanceByHeight: Map<Int, Int>,
         )
 
         return input
             .parse()
             .getSweepMaps { _, height, sweepState: SweepState? ->
                 val distanceToEdge =  sweepState?.distanceToEdge ?: 0
-                val previousHeightDistances = (sweepState?.previousHeightDistances ?: emptyMap())
+                val newDistanceByHeight = (sweepState?.distanceByHeight ?: emptyMap())
                     .filter { (h, _) -> h >= height }
                     .mapValues { (_, d) -> d + 1 }
                 SweepState(
-                    distance = previousHeightDistances.values.minOrNull() ?: distanceToEdge,
+                    distance = newDistanceByHeight.values.minOrNull() ?: distanceToEdge,
                     distanceToEdge = distanceToEdge + 1,
-                    previousHeightDistances = previousHeightDistances + Pair(height, 0)
+                    distanceByHeight = newDistanceByHeight + Pair(height, 0)
                 )
             }
-            .map { sweepMap -> sweepMap.mapValues { (_, hd) -> hd.distance } }
+            .map { sweepMap -> sweepMap.mapValues { (_, state) -> state.distance } }
             .flatMap { it.entries }
             .groupBy({ it.key }) { it.value }
             .mapValues { (_, distances) -> distances.reduce { a, b -> a * b } }

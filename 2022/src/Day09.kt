@@ -11,38 +11,39 @@ fun main() {
         .mapNotNull { line -> instructionRegex.matchEntire(line)?.groupValues }
         .map { gv -> Instruction(gv[1].first(), gv[2].toInt()) }
 
-    fun List<Instruction>.generateRopes(initialRope: List<Point>): Sequence<List<Point>> = sequence {
+    fun List<Instruction>.generateRopes(initialRope: List<Point>) = sequence {
         yield(initialRope)
         this@generateRopes
             .asSequence()
             .flatMap { instruction -> List(instruction.distance) { instruction.direction } }
-            .fold(initialRope) { rope, direction ->
-                val newRope = rope.fold(emptyList<Point>()) { partialNewRope, tail ->
-                    partialNewRope + if (partialNewRope.isEmpty()) {
-                        when (direction) {
-                            'L' -> Point(tail.x - 1, tail.y)
-                            'R' -> Point(tail.x + 1, tail.y)
-                            'U' -> Point(tail.x, tail.y - 1)
-                            'D' -> Point(tail.x, tail.y + 1)
-                            else -> error("bad direction char ${direction}.")
-                        }
-                    } else {
-                        val head = partialNewRope.last()
-                        val deltaX = head.x - tail.x
-                        val deltaY = head.y - tail.y
-                        if (abs(deltaX) > 1 || abs(deltaY) > 1) {
-                            Point(
-                                x = tail.x + minOf(maxOf(deltaX, -1), 1),
-                                y = tail.y + minOf(maxOf(deltaY, -1), 1),
-                            )
-                        } else {
-                            tail
+            .fold(initialRope) { currentRope, direction ->
+                currentRope
+                    .fold(emptyList<Point>()) { partialNewRope, point ->
+                        partialNewRope + when (val penultimate = partialNewRope.lastOrNull()) {
+                            null -> {
+                                when (direction) {
+                                    'L' -> Point(point.x - 1, point.y)
+                                    'R' -> Point(point.x + 1, point.y)
+                                    'U' -> Point(point.x, point.y - 1)
+                                    'D' -> Point(point.x, point.y + 1)
+                                    else -> error("bad direction char ${direction}.")
+                                }
+                            }
+                            else -> {
+                                val deltaX = penultimate.x - point.x
+                                val deltaY = penultimate.y - point.y
+                                if (abs(deltaX) > 1 || abs(deltaY) > 1) {
+                                    Point(
+                                        x = point.x + minOf(maxOf(deltaX, -1), 1),
+                                        y = point.y + minOf(maxOf(deltaY, -1), 1),
+                                    )
+                                } else {
+                                    point
+                                }
+                            }
                         }
                     }
-                }
-
-                yield(newRope)
-                newRope
+                    .also { newRope -> yield(newRope) }
             }
     }
 

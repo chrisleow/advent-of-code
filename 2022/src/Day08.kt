@@ -32,16 +32,16 @@ fun main() {
     }
 
     fun part1(input: List<String>): Int {
-        data class SweepState(
+        data class State(
             val maxHeight: Int,
             val isVisible: Boolean,
         )
 
         return input
             .parse()
-            .getSweepResults { height, state: SweepState? ->
+            .getSweepResults { height, state: State? ->
                 val maxHeight = state?.maxHeight ?: -1
-                SweepState(maxOf(height, maxHeight), height > maxHeight)
+                State(maxOf(height, maxHeight), height > maxHeight)
             }
             .groupingBy { (p, _) -> p }
             .aggregate { _, visible: Boolean?, (_, state), _ -> (visible ?: false) || state.isVisible }
@@ -49,7 +49,7 @@ fun main() {
     }
 
     fun part2(input: List<String>): Int {
-        data class SweepState(
+        data class State(
             val distance: Int,
             val distanceToEdge: Int,
             val distanceByHeight: Map<Int, Int>,
@@ -57,15 +57,15 @@ fun main() {
 
         return input
             .parse()
-            .getSweepResults { height, state: SweepState? ->
-                val distanceToEdge = state?.distanceToEdge ?: 0
-                val newDistanceByHeight = (state?.distanceByHeight ?: emptyMap())
+            .getSweepResults { height, state: State? ->
+                val distanceToEdge = state?.distanceToEdge?.plus(1) ?: 0
+                val distanceByHeight = (state?.distanceByHeight ?: emptyMap())
                     .filter { (h, _) -> h >= height }
                     .mapValues { (_, d) -> d + 1 }
-                SweepState(
-                    distance = newDistanceByHeight.values.minOrNull() ?: distanceToEdge,
-                    distanceToEdge = distanceToEdge + 1,
-                    distanceByHeight = newDistanceByHeight + Pair(height, 0)
+                State(
+                    distance = distanceByHeight.values.minOrNull() ?: distanceToEdge,
+                    distanceToEdge = distanceToEdge,
+                    distanceByHeight = distanceByHeight + Pair(height, 0)
                 )
             }
             .groupingBy { (p, _) -> p }

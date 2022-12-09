@@ -19,7 +19,7 @@ fun main() {
             .fold(initialRope) { currentRope, direction ->
                 currentRope
                     .fold(emptyList<Point>()) { partialNewRope, point ->
-                        partialNewRope + when (val penultimate = partialNewRope.lastOrNull()) {
+                        partialNewRope + when (val lastNewPoint = partialNewRope.lastOrNull()) {
                             null -> {
                                 when (direction) {
                                     'L' -> Point(point.x - 1, point.y)
@@ -30,8 +30,8 @@ fun main() {
                                 }
                             }
                             else -> {
-                                val deltaX = penultimate.x - point.x
-                                val deltaY = penultimate.y - point.y
+                                val deltaX = lastNewPoint.x - point.x
+                                val deltaY = lastNewPoint.y - point.y
                                 if (abs(deltaX) > 1 || abs(deltaY) > 1) {
                                     Point(
                                         x = point.x + minOf(maxOf(deltaX, -1), 1),

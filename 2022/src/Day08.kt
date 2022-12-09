@@ -8,46 +8,37 @@ fun main() {
         .toMap()
 
     // for maximum efficiency ... and fun!
-    fun <R> Map<Point, Int>.getSweepMaps(block: (Int, R?) -> R): List<Map<Point, R>> {
-        val maxX = this.keys.maxOf { it.x }
-        val maxY = this.keys.maxOf { it.y }
+    fun <R> Map<Point, Int>.getSweepResults(block: (Int, R?) -> R) = sequence {
+        val maxX = keys.maxOf { it.x }
+        val maxY = keys.maxOf { it.y }
 
         val sweeps = listOf(
-            Pair((0 .. maxY).map { y -> Point(0, y) }, Pair(1, 0)),
-            Pair((0 .. maxY).map { y -> Point(maxX, y) }, Pair(-1, 0)),
-            Pair((0 .. maxX).map { x -> Point(x, 0) }, Pair(0, 1)),
-            Pair((0 .. maxX).map { x -> Point(x, maxY) }, Pair(0, -1)),
+            Triple((0 .. maxY).map { y -> Point(0, y) }, 1, 0),
+            Triple((0 .. maxY).map { y -> Point(maxX, y) }, -1, 0),
+            Triple((0 .. maxX).map { x -> Point(x, 0) }, 0, 1),
+            Triple((0 .. maxX).map { x -> Point(x, maxY) }, 0, -1),
         )
 
-        return sweeps.map { (initialPoints, deltaXY) ->
-            val (deltaX, deltaY) = deltaXY
-            initialPoints
-                .flatMap { initialPoint ->
-                    sequence {
-                        var point = initialPoint
-                        var previousAcc: R? = null
-                        while (point in this@getSweepMaps) {
-                            val height = this@getSweepMaps[point] ?: error("bad point")
-                            val accumulator = block(height, previousAcc)
-                            yield(Pair(point, accumulator))
-                            point = Point(point.x + deltaX, point.y + deltaY)
-                            previousAcc = accumulator
-                        }
+        sweeps.forEach { (initialPoints, deltaX, deltaY) ->
+            initialPoints.forEach { initialPoint ->
+                generateSequence(initialPoint) { Point(it.x + deltaX, it.y + deltaY) }
+                    .takeWhile { it in this@getSweepResults }
+                    .fold(null) { accumulator: R?, point ->
+                        val height = this@getSweepResults[point] ?: error("bad point")
+                        block(height, accumulator).also { yield(point to it) }
                     }
-                }
-                .toMap()
+            }
         }
     }
 
     fun part1(input: List<String>): Int {
         return input
             .parse()
-            .getSweepMaps { height, state: Pair<Int, Boolean>? ->
+            .getSweepResults { height, state: Pair<Int, Boolean>? ->
                 val maxHeight = state?.first ?: -1
                 Pair(maxOf(height, maxHeight), height > maxHeight)
             }
-            .flatMap { it.entries }
-            .groupBy({ it.key }) { it.value.second }
+            .groupBy({ (p, _) -> p }) { (_, hv) -> hv.second }
             .mapValues { (_, visibilities) -> visibilities.any { it } }
             .count { it.value }
     }
@@ -61,7 +52,7 @@ fun main() {
 
         return input
             .parse()
-            .getSweepMaps { height, state: SweepState? ->
+            .getSweepResults { height, state: SweepState? ->
                 val distanceToEdge = state?.distanceToEdge ?: 0
                 val newDistanceByHeight = (state?.distanceByHeight ?: emptyMap())
                     .filter { (h, _) -> h >= height }
@@ -72,9 +63,7 @@ fun main() {
                     distanceByHeight = newDistanceByHeight + Pair(height, 0)
                 )
             }
-            .map { sweepMap -> sweepMap.mapValues { (_, state) -> state.distance } }
-            .flatMap { it.entries }
-            .groupBy({ it.key }) { it.value }
+            .groupBy({ (p, _) -> p }) { (_, s) -> s.distance }
             .mapValues { (_, distances) -> distances.reduce { a, b -> a * b } }
             .maxOf { (_, score) -> score }
     }

@@ -32,15 +32,20 @@ fun main() {
     }
 
     fun part1(input: List<String>): Int {
+        data class SweepState(
+            val maxHeight: Int,
+            val isVisible: Boolean,
+        )
+
         return input
             .parse()
-            .getSweepResults { height, state: Pair<Int, Boolean>? ->
-                val maxHeight = state?.first ?: -1
-                Pair(maxOf(height, maxHeight), height > maxHeight)
+            .getSweepResults { height, state: SweepState? ->
+                val maxHeight = state?.maxHeight ?: -1
+                SweepState(maxOf(height, maxHeight), height > maxHeight)
             }
-            .groupBy({ (p, _) -> p }) { (_, hv) -> hv.second }
-            .mapValues { (_, visibilities) -> visibilities.any { it } }
-            .count { it.value }
+            .groupingBy { (p, _) -> p }
+            .aggregate { _, visible: Boolean?, (_, state), _ -> (visible ?: false) || state.isVisible }
+            .count { (_, visible) -> visible }
     }
 
     fun part2(input: List<String>): Int {
@@ -63,8 +68,8 @@ fun main() {
                     distanceByHeight = newDistanceByHeight + Pair(height, 0)
                 )
             }
-            .groupBy({ (p, _) -> p }) { (_, s) -> s.distance }
-            .mapValues { (_, distances) -> distances.reduce { a, b -> a * b } }
+            .groupingBy { (p, _) -> p }
+            .aggregate { _, score: Int?, (_, state), _ -> (score ?: 1) * state.distance }
             .maxOf { (_, score) -> score }
     }
 

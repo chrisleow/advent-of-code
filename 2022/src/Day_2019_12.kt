@@ -45,17 +45,18 @@ fun main() {
             .windowed(2)
             .first { indexedSets -> indexedSets[0].value.getDistances() == indexedSets[1].value.getDistances() }
 
+        // converged, now extrapolate with drift of plant numberings
         val (index0, set0) = sameIndexedPatternSets[0]
         val (_, set1) = sameIndexedPatternSets[1]
         val indexDelta = set1.min() - set0.min()
         return set0.sumOf { it + ((50_000_000_000L - index0) * indexDelta) }
     }
 
-    val testInput = readInput("Day_12_2019_test")
+    val testInput = readInput("Day_2019_12_test")
     check(part1(testInput) == 325)
     check(part2(testInput) == 999999999374L)
 
-    val input = readInput("Day_12_2019")
+    val input = readInput("Day_2019_12")
     println("Part 1 ${part1(input)}")
     println("Part 2 ${part2(input)}")
 }

@@ -59,7 +59,7 @@ fun main() {
             .forEach { append(":$it") }
     }
 
-    fun State.move(generators: List<String>, microchips: List<String>, destination: Int) = this.copy(
+    fun State.move(generators: List<String>, microchips: List<String>, destination: Int) = State(
         elevator = destination,
         itemFloors = this.itemFloors.mapValues { (item, floors) ->
             ItemFloors(
@@ -117,7 +117,7 @@ fun main() {
 
         while (queue.isNotEmpty()) {
             val state = queue.remove() ?: continue
-            if (state.itemFloors.values.all { (gf, mf) -> gf == 3 && mf == 3 }) {
+            if (state.itemFloors.values.all { it.generator == 3 && it.microchip == 3 }) {
                 if (printSolution) {
                     generateSequence(state) { it.previous }
                         .toList()
@@ -159,10 +159,10 @@ fun main() {
         )
         .solve(printDebug)
 
-    val testInput = readInput("Day_11_2016_test")
+    val testInput = readInput("Day_2016_11_test")
     check(part1(testInput, false) == 11)
 
-    val input = readInput("Day_11_2016")
+    val input = readInput("Day_2016_11")
     println("Part 1: ${part1(input, true)}")
     println("Part 2: ${part2(input, true)}")
 }

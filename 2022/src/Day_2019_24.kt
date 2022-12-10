@@ -91,11 +91,11 @@ fun main() {
             .count()
     }
 
-    val testInput = readInput("Day_24_2019_test")
+    val testInput = readInput("Day_2019_24_test")
     check(part1(testInput) == 2129920)
     check(part2(testInput, 10) == 99)
 
-    val input = readInput("Day_24_2019")
+    val input = readInput("Day_2019_24")
     println("Part 1: ${part1(input)}")
     println("Part 2: ${part2(input, 200)}")
 }

@@ -1,7 +1,7 @@
 fun main() {
 
-    data class Instruction(val type: String, val parameter: Int)
-    data class State(val cycle: Int, val duringX: Int, val afterX: Int)
+    data class Instruction(val type: String, val deltaX: Int)
+    data class State(val cycle: Int, val x: Int)
 
     fun List<String>.parse() = buildList {
         this@parse.forEach { line ->
@@ -13,40 +13,35 @@ fun main() {
         }
     }
 
-    fun State.applyInstruction(instruction: Instruction) = buildList {
-        when (instruction.type) {
-            "addx" -> {
-                add(State(cycle = cycle + 1, duringX = afterX, afterX = afterX))
-                add(State(cycle = cycle + 2, duringX = afterX, afterX = afterX + instruction.parameter))
+    fun List<Instruction>.getStates() = sequence {
+        this@getStates.fold(Pair(0, 1)) { (cycle, x), instruction ->
+            when (instruction.type) {
+                "addx" -> {
+                    yield(State(cycle + 1, x))
+                    yield(State(cycle + 2, x))
+                    Pair(cycle + 2, x + instruction.deltaX)
+                }
+                "noop" -> {
+                    yield(State(cycle + 1, x))
+                    Pair(cycle + 1, x)
+                }
+                else -> error("bad instruction")
             }
-            "noop" -> {
-                add(State(cycle = cycle + 1, duringX = afterX, afterX = afterX))
-            }
-            else -> error("bad instruction")
         }
     }
 
-    fun List<Instruction>.getStates() = sequence {
-        this@getStates.fold(State(0, 1, 1)) { state, instruction ->
-            state
-                .applyInstruction(instruction)
-                .also { nextStates -> yieldAll(nextStates) }
-                .last()
-        }
-    }
     fun part1(input: List<String>) = input
         .parse()
         .getStates()
         .filter { it.cycle in listOf(20, 60, 100, 140, 180, 220) }
-        .sumOf { it.cycle * it.duringX }
+        .sumOf { it.cycle * it.x }
 
     fun part2(input: List<String>) = buildString {
         input.parse()
             .getStates()
-            .forEach { state ->
-                val displayX = (state.cycle - 1) % 40
-                append(if (displayX in (state.duringX - 1 .. state.duringX + 1)) "\u2588" else " ")
-                if (state.cycle % 40 == 0) {
+            .forEach { (cycle, x) ->
+                append(if ((cycle - 1) % 40 in (x - 1 .. x + 1)) "\u2588" else ".")
+                if (cycle % 40 == 0) {
                     appendLine()
                 }
             }

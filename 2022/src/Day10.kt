@@ -40,7 +40,11 @@ fun main() {
         input.parse()
             .getStates()
             .forEach { (cycle, x) ->
-                append(if ((cycle - 1) % 40 in (x - 1 .. x + 1)) "\u2588" else ".")
+                if ((cycle - 1) % 40 in (x - 1 .. x + 1)) {
+                    append("\u2588")
+                } else {
+                    append(".")
+                }
                 if (cycle % 40 == 0) {
                     appendLine()
                 }

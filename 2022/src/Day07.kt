@@ -32,8 +32,8 @@ fun main() {
         .flatMap { nf -> (0 .. nf.path.size).map { size -> nf.copy(path = nf.path.take(size)) } }
         .groupingBy { nf -> nf.path }
         .aggregate { _, total: Int?, nf, _ -> (total ?: 0) + (nf.size ?: 0) }
-        .filter { it.value <= 100000 }
-        .values
+        .map { it.value }
+        .filter { it <= 100000 }
         .sum()
 
     fun part2(input: List<String>): Int {
@@ -45,10 +45,9 @@ fun main() {
 
         val totalSize = sizes[emptyList()] ?: error("shouldn't get here.")
         val spaceToFree = 30000000 - (70000000 - totalSize)
-        return sizes.entries
-            .filter { it.value >= spaceToFree }
-            .asIterable()
-            .minOf { it.value }
+        return sizes.values
+            .filter { it >= spaceToFree }
+            .min()
     }
 
     val testInput = readInput("Day07_test")

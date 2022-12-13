@@ -92,8 +92,8 @@ fun main() {
         .drop(10000)
         .first()
         .let { state ->
-            val counts = state.inspections.values.sortedDescending().map { it.toLong() }
-            counts[0] * counts[1]
+            val counts = state.inspections.values.sortedDescending()
+            counts[0].toLong() * counts[1].toLong()
         }
 
     val testInput = readInput("Day11_test")

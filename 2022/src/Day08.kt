@@ -8,7 +8,7 @@ fun main() {
         .toMap()
 
     // for maximum efficiency ... and fun!
-    fun <R> Map<Point, Int>.getSweepResults(block: (Int, R?) -> R) = sequence {
+    fun <R> Map<Point, Int>.getSweepAggregations(block: (Int, R?) -> R) = sequence {
         val maxX = keys.maxOf { it.x }
         val maxY = keys.maxOf { it.y }
 
@@ -22,9 +22,9 @@ fun main() {
         sweeps.forEach { (initialPoints, deltaX, deltaY) ->
             initialPoints.forEach { initialPoint ->
                 generateSequence(initialPoint) { Point(it.x + deltaX, it.y + deltaY) }
-                    .takeWhile { it in this@getSweepResults }
+                    .takeWhile { it in this@getSweepAggregations }
                     .fold(null) { accumulator: R?, point ->
-                        val height = this@getSweepResults[point] ?: error("bad point")
+                        val height = this@getSweepAggregations[point] ?: error("bad point")
                         block(height, accumulator).also { yield(point to it) }
                     }
             }
@@ -39,13 +39,13 @@ fun main() {
 
         return input
             .parse()
-            .getSweepResults { height, state: State? ->
+            .getSweepAggregations { height, state: State? ->
                 val maxHeight = state?.maxHeight ?: -1
                 State(maxOf(height, maxHeight), height > maxHeight)
             }
             .groupingBy { (p, _) -> p }
-            .aggregate { _, visible: Boolean?, (_, state), _ -> (visible ?: false) || state.isVisible }
-            .count { (_, visible) -> visible }
+            .aggregate { _, v: Boolean?, (_, s), _ -> (v ?: false) || s.isVisible }
+            .count { (_, v) -> v }
     }
 
     fun part2(input: List<String>): Int {
@@ -57,7 +57,7 @@ fun main() {
 
         return input
             .parse()
-            .getSweepResults { height, state: State? ->
+            .getSweepAggregations { height, state: State? ->
                 val distanceToEdge = state?.distanceToEdge?.plus(1) ?: 0
                 val distanceByHeight = (state?.distanceByHeight ?: emptyMap())
                     .filter { (h, _) -> h >= height }
@@ -69,8 +69,8 @@ fun main() {
                 )
             }
             .groupingBy { (p, _) -> p }
-            .aggregate { _, score: Int?, (_, state), _ -> (score ?: 1) * state.distance }
-            .maxOf { (_, score) -> score }
+            .aggregate { _, sc: Int?, (_, s), _ -> (sc ?: 1) * s.distance }
+            .maxOf { (_, sc) -> sc }
     }
 
     val testInput = readInput("Day08_test")

@@ -10,15 +10,16 @@ fun main() {
         .flatMapIndexed { y, line -> line.mapIndexed { x, char -> Point(x, y) to char } }
         .toMap()
 
-    fun getElevation(map: Map<Point, Char>, point: Point) = when(val char = map[point]) {
-        null -> Int.MAX_VALUE
-        'S' -> 1
-        'E' -> 26
-        else -> char.code - 'a'.code + 1
-    }
+    fun Map<Point, Char>.elevationAt(point: Point) =
+        when(val char = this[point]) {
+            null -> Int.MAX_VALUE
+            'S' -> 1
+            'E' -> 26
+            else -> char.code - 'a'.code + 1
+        }
 
     fun Step.getNextSteps(map: Map<Point, Char>, predicate: (Int) -> Boolean) = sequence {
-        val elevation = getElevation(map, point)
+        val elevation = map.elevationAt(point)
         val adjacentPoints = listOf(
             Point(point.x - 1, point.y),
             Point(point.x + 1, point.y),
@@ -26,7 +27,7 @@ fun main() {
             Point(point.x, point.y + 1),
         )
         adjacentPoints
-            .filter { p -> predicate(getElevation(map, p) - elevation) }
+            .filter { p -> predicate(map.elevationAt(p) - elevation) }
             .forEach { p -> yield(Step(p, count + 1, this@getNextSteps)) }
     }
 
@@ -69,7 +70,7 @@ fun main() {
 
         while (queue.isNotEmpty()) {
             val currentStep = queue.remove() ?: break
-            if (getElevation(map, currentStep.point) == 1) {
+            if (map.elevationAt(currentStep.point) == 1) {
                 return currentStep.count
             }
 

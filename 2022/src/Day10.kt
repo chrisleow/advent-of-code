@@ -43,7 +43,7 @@ fun main() {
                 if ((cycle - 1) % 40 in (x - 1 .. x + 1)) {
                     append("\u2588")
                 } else {
-                    append(".")
+                    append("\u00b7")
                 }
                 if (cycle % 40 == 0) {
                     appendLine()

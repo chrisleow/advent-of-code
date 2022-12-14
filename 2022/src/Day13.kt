@@ -1,71 +1,68 @@
-sealed class Packet {
-    data class Single(val value: Int) : Packet()
-    data class Group(val packets: List<Packet>) : Packet()
-}
-
 fun main() {
 
-    fun List<String>.parse(): List<List<Packet>> {
-        val tokenRegex = "(\\[|]|\\d+)".toRegex()
-        return this
-            .split { it.isBlank() }
-            .map { lines ->
-                lines.map { line ->
-                    val tokens = tokenRegex.findAll(line).map { it.value }.toList()
-                    fun parse(index: Int): Pair<Int, Packet> =
-                        if (tokens[index] != "[") {
-                            Pair(index + 1, Packet.Single(tokens[index].toInt()))
+    abstract class Packet
+    data class SinglePacket(val value: Int) : Packet()
+    data class ListPacket(val packets: List<Packet>) : Packet()
+
+    val tokenRegex = "(\\[|]|\\d+)".toRegex()
+
+    fun List<String>.parse(): List<List<Packet>> = this
+        .split { it.isBlank() }
+        .map { lines ->
+            lines.map { line ->
+                val tokens = tokenRegex.findAll(line).map { it.value }.toList()
+
+                fun parse(index: Int): Pair<Int, Packet> {
+                    tailrec fun parseMany(subIndex: Int, packets: List<Packet>): Pair<Int, Packet> {
+                        return if (tokens[subIndex] == "]") {
+                            Pair(subIndex + 1, ListPacket(packets))
                         } else {
-                            tailrec fun parseGroup(subIndex: Int, subPackets: List<Packet>): Pair<Int, Packet> =
-                                if (tokens[subIndex] == "]") {
-                                    Pair(subIndex + 1, Packet.Group(subPackets))
-                                } else {
-                                    val (nextSubIndex, subPacket) = parse(subIndex)
-                                    parseGroup(nextSubIndex, subPackets + subPacket)
-                                }
-                            parseGroup(index + 1, emptyList())
+                            val (nextSubIndex, packet) = parse(subIndex)
+                            parseMany(nextSubIndex, packets + packet)
                         }
-                    parse(0).second
-                }
-            }
-    }
+                    }
 
-    fun Packet.toCanonicalString(): String = when (this) {
-        is Packet.Single -> this.value.toString()
-        is Packet.Group -> this.packets.joinToString(", ", prefix = "[", postfix = "]") { subPacket ->
-            subPacket.toCanonicalString()
-        }
-    }
-
-    fun comparePackets(left: Packet, right: Packet): Int {
-        when {
-            left is Packet.Single && right is Packet.Single -> {
-                return when {
-                    left.value < right.value -> -1
-                    left.value > right.value -> 1
-                    else -> 0
-                }
-            }
-            left is Packet.Group && right is Packet.Group -> {
-                (0 until maxOf(left.packets.size, right.packets.size)).forEach { index ->
-                    val subLeft = if (index < left.packets.size) left.packets[index] else return -1
-                    val subRight = if (index < right.packets.size) right.packets[index] else return 1
-                    when (val comparison = comparePackets(subLeft, subRight)) {
-                        0 -> { /** noop */ }
-                        else -> return comparison
+                    return if (tokens[index] == "[") {
+                        parseMany(index + 1, emptyList())
+                    } else {
+                        Pair(index + 1, SinglePacket(tokens[index].toInt()))
                     }
                 }
-                return 0
-            }
-            else -> {
-                return when {
-                    left is Packet.Single -> comparePackets(Packet.Group(listOf(left)), right)
-                    right is Packet.Single -> comparePackets(left, Packet.Group(listOf(right)))
-                    else -> error("should never et here.")
-                }
+
+                parse(0).second
             }
         }
+
+    fun Packet.toCanonicalString(): String = when (this) {
+        is SinglePacket -> {
+            this.value.toString()
+        }
+        is ListPacket -> {
+            this.packets.joinToString(",", prefix = "[", postfix = "]") { it.toCanonicalString() }
+        }
+        else -> error("wouldn't get here with embedded sealed classes!")
     }
+
+    fun comparePackets(left: Packet, right: Packet): Int =
+        when {
+            left is ListPacket && right is ListPacket -> {
+                val firstComparison = (0 until maxOf(left.packets.size, right.packets.size))
+                    .asSequence()
+                    .map { index ->
+                        val subLeft = left.packets.getOrNull(index) ?: return@map -1
+                        val subRight = right.packets.getOrNull(index) ?: return@map 1
+                        comparePackets(subLeft, subRight)
+                    }
+                    .firstOrNull { it != 0 }
+                (firstComparison?: 0)
+            }
+            left is SinglePacket -> when (right) {
+                is SinglePacket -> left.value.compareTo(right.value)
+                else -> comparePackets(ListPacket(listOf(left)), right)
+            }
+            right is SinglePacket -> comparePackets(left, ListPacket(listOf(right)))
+            else -> error("wouldn't get here with embedded sealed classes!")
+        }
 
     fun part1(input: List<String>) = input
         .parse()
@@ -80,7 +77,7 @@ fun main() {
         .withIndex()
         .filter { (_, packet) -> packet.toCanonicalString() in listOf("[[2]]", "[[6]]") }
         .map { (zeroIndex, _) -> zeroIndex + 1 }
-        .reduce { a, b -> a * b }
+        .reduce { index0, index1 -> index0 * index1 }
 
     val testInput = readInput("Day13_test")
     check(part1(testInput) == 13)

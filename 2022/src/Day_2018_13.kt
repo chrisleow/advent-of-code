@@ -1,70 +1,151 @@
 fun main() {
 
-    data class Point(val x: Int, val y: Int)
+    data class Point(
+        val x: Int,
+        val y: Int,
+    )
+    data class CartState(
+        val point: Point,
+        val previousPoint: Point,
+        val direction: Char,
+        val nextTurn: Char,
+        val isCrashed: Boolean,
+    )
+    data class State(
+        val map: Map<Point, Char>,
+        val carts: List<CartState>,
+    )
 
     fun List<String>.parse() = this
-        .joinToString("")
-        .trim()
-        .toInt()
-
-    fun getPowerLevel(x: Int, y: Int, serialNumber: Int) =
-        (((((x + 10) * y) + serialNumber) * (x + 10) / 100) % 10) - 5
-
-    fun getSummedAreaMap(serialNumber: Int): Map<Point, Int> {
-        val powerLevels = (1 .. 301)
-            .flatMap { x -> (1 .. 301).map { y -> Point(x, y) to getPowerLevel(x, y, serialNumber)} }
-            .toMap()
-
-        return buildMap {
-            (1 .. 301).forEach { y ->
-                (1 .. 301).forEach { x ->
-                    fun areaAt(x0: Int, y0: Int) = get(Point(x0, y0)) ?: 0
-                    val components = listOf(
-                        areaAt(x, y - 1),
-                        areaAt(x - 1, y) - areaAt(x - 1, y - 1),
-                        powerLevels[Point(x, y)] ?: 0,
-                    )
-                    put(Point(x, y), components.sum())
-                }
+        .filter { it.isNotBlank() }
+        .flatMapIndexed { y, line -> line.mapIndexed { x, char -> Point(x, y) to char } }
+        .fold(State(emptyMap(), emptyList())) { state, (point, char) ->
+            when (char) {
+                '>', '<' -> state.copy(
+                    map = state.map + (point to '-'),
+                    carts = state.carts + CartState(point, point, char, 'L', false),
+                )
+                '^', 'v' -> state.copy(
+                    map = state.map + (point to '|'),
+                    carts = state.carts + CartState(point, point, char, 'L', false),
+                )
+                '/', '\\', '-', '|', '+' -> state.copy(
+                    map = state.map + (point to char),
+                )
+                else -> state
             }
         }
-    }
 
-    fun getArea(summedAreaMap: Map<Point, Int>, x: Int, y: Int, width: Int): Int {
-        return ((summedAreaMap[Point(x + width - 1, y + width - 1)] ?: 0)
-                - (summedAreaMap[Point(x - 1, y + width - 1)] ?: 0)
-                - (summedAreaMap[Point(x + width - 1, y - 1)] ?: 0)
-                + (summedAreaMap[Point(x - 1, y - 1)] ?: 0))
-    }
+    fun State.next(): State {
+        val filteredCarts = this.carts
+            .filter { !it.isCrashed }
+        val newCarts = filteredCarts
+            .sortedWith(compareBy({ it.point.x }, { it.point.y }))
+            .map { cart ->
 
-    fun <V, U> Iterable<V>.crossWith(other: Iterable<U>) =
-        this.flatMap { v -> other.map { u -> Pair(v, u) } }
+                // point the cart in the right direction, without moving yet
+                val turnedCart = when (this.map[cart.point]) {
+                    '-' -> when (cart.direction) {
+                        '>', '<' -> cart
+                        else -> error("shouldn't get here.")
+                    }
+                    '|' -> when (cart.direction) {
+                        '^', 'v' -> cart
+                        else -> error("shouldn't get here.")
+                    }
+                    '/' -> when (cart.direction) {
+                        '>' -> cart.copy(direction = '^')
+                        '<' -> cart.copy(direction = 'v')
+                        '^' -> cart.copy(direction = '>')
+                        'v' -> cart.copy(direction = '<')
+                        else -> error("shouldn't get here.")
+                    }
+                    '\\' -> when (cart.direction) {
+                        '>' -> cart.copy(direction = 'v')
+                        '<' -> cart.copy(direction = '^')
+                        '^' -> cart.copy(direction = '<')
+                        'v' -> cart.copy(direction = '>')
+                        else -> error("shouldn't get here.")
+                    }
+                    '+' -> {
+                        when (cart.direction) {
+                            '>' -> when (cart.nextTurn) {
+                                'L' -> cart.copy(direction = '^', nextTurn = 'S')
+                                'S' -> cart.copy(direction = '>', nextTurn = 'R')
+                                'R' -> cart.copy(direction = 'v', nextTurn = 'L')
+                                else -> error("shouldn't get here.")
+                            }
+                            '<' -> when (cart.nextTurn) {
+                                'L' -> cart.copy(direction = 'v', nextTurn = 'S')
+                                'S' -> cart.copy(direction = '<', nextTurn = 'R')
+                                'R' -> cart.copy(direction = '^', nextTurn = 'L')
+                                else -> error("shouldn't get here.")
+                            }
+                            '^' -> when (cart.nextTurn) {
+                                'L' -> cart.copy(direction = '<', nextTurn = 'S')
+                                'S' -> cart.copy(direction = '^', nextTurn = 'R')
+                                'R' -> cart.copy(direction = '>', nextTurn = 'L')
+                                else -> error("shouldn't get here.")
+                            }
+                            'v' -> when (cart.nextTurn) {
+                                'L' -> cart.copy(direction = '>', nextTurn = 'S')
+                                'S' -> cart.copy(direction = 'v', nextTurn = 'R')
+                                'R' -> cart.copy(direction = '<', nextTurn = 'L')
+                                else -> error("shouldn't get here.")
+                            }
+                            else -> error("shouldn't get here.")
+                        }
+                    }
+                    else -> error("shouldn't get here.")
+                }
+
+                // move forward one point in the correct direction
+                turnedCart.copy(
+                    point = when (turnedCart.direction) {
+                        '>' -> Point(turnedCart.point.x + 1, turnedCart.point.y)
+                        '<' -> Point(turnedCart.point.x - 1, turnedCart.point.y)
+                        '^' -> Point(turnedCart.point.x, turnedCart.point.y - 1)
+                        'v' -> Point(turnedCart.point.x, turnedCart.point.y + 1)
+                        else -> error("not a valid cart char ${turnedCart.direction}.")
+                    },
+                    previousPoint = turnedCart.point,
+                )
+            }
+
+        return this.copy(
+            carts = newCarts.map { newCart ->
+                val crossCrash = filteredCarts
+                    .any { c -> (newCart.point == c.previousPoint) && (newCart.previousPoint == c.point) }
+                val collideCrash = newCarts
+                    .any { c -> (newCart.point == c.point) && (newCart != c) }
+                newCart.copy(isCrashed = crossCrash || collideCrash)
+            }
+        )
+    }
 
     fun part1(input: List<String>): String {
-        val serialNumber = input.parse()
-        val summedAreaMap = getSummedAreaMap(serialNumber)
-        return (1 .. 299).crossWith(1 .. 299)
-            .maxBy { (topX, topY) -> getArea(summedAreaMap, topX, topY, 3) }
-            .let { (x, y) -> "$x,$y" }
+        return generateSequence(input.parse()) { it.next() }
+            .map { state ->
+                state
+            }
+            .firstNotNullOf { state -> state.carts.firstOrNull { it.isCrashed } }
+            .let { cart -> "${cart.point.x},${cart.point.y}" }
     }
 
     fun part2(input: List<String>): String {
-        val serialNumber = input.parse()
-        val summedAreaMap = getSummedAreaMap(serialNumber)
-        return (1 .. 300)
-            .flatMap { width ->
-                (1 .. 301 - width).crossWith(1 .. 301 - width)
-                    .map { (x, y) -> Point(x, y) to width }
-            }
-            .maxBy { (point, width) -> getArea(summedAreaMap, point.x, point.y, width) }
-            .let { (point, width) -> "${point.x},${point.y},${width}" }
+        return generateSequence(input.parse()) { it.next() }
+            .dropWhile { state -> state.carts.size > 1 }
+            .first()
+            .carts
+            .map { "${it.point.x},${it.point.y}" }
+            .first()
     }
 
-    val testInput = readInput("Day_2018_11_test")
-    check(part1(testInput) == "21,61")
-    check(part2(testInput) == "232,251,12")
+    val testInput = readInput("Day_2018_13_test")
+    check(part1(testInput) == "2,0")
+    // check(part2(testInput) == "6,4")
 
-    val input = readInput("Day_2018_11")
+    val input = readInput("Day_2018_13")
     println("Part 1: ${part1(input)}")
-    println("Part 2: ${part2(input)}")
+    // println("Part 2: ${part2(input)}")
 }

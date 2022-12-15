@@ -18,7 +18,8 @@ fun main() {
     fun List<String>.parse(): State {
         val segmentRegex = "(\\d+),(\\d+)".toRegex()
         val segments = this.flatMap { line ->
-            segmentRegex.findAll(line)
+            segmentRegex
+                .findAll(line)
                 .map { m -> Point(m.groupValues[1].toInt(), m.groupValues[2].toInt()) }
                 .windowed(2)
         }

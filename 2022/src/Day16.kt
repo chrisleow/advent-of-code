@@ -12,35 +12,47 @@ fun main() {
     }
 
     fun List<Valve>.toAdjacencyMap(): AdjacencyMap {
+        val valves = this
 
-        // initial distances
-        val allDistances = mutableMapOf<Pair<String, String>, Int>()
-        this.forEach { valve ->
-            allDistances[valve.room to valve.room] = 0
-            valve.linkedRooms.forEach { linkedRoom ->
-                allDistances[valve.room to linkedRoom] = 1
-            }
-        }
-
-        // apply Floyd-Warshall
-        for (kValve in this) {
-            for (iValve in this) {
-                for (jValve in this) {
-                    val ijDistance = allDistances[iValve.room to jValve.room] ?: 1_000_000_000
-                    val ikDistance = allDistances[iValve.room to kValve.room] ?: 1_000_000_000
-                    val jkDistance = allDistances[jValve.room to kValve.room] ?: 1_000_000_000
-                    if (ijDistance > ikDistance + jkDistance) {
-                        allDistances[iValve.room to jValve.room] = ikDistance + jkDistance
-                        allDistances[jValve.room to iValve.room] = ikDistance + jkDistance
-                    }
+        // build full adjacency map (wanna stay fully functional)
+        val distances = run {
+            val initialDistances = valves.associate { valve ->
+                valve.room to buildMap {
+                    put(valve.room, 0)
+                    valve.linkedRooms.forEach { put(it, 1) }
                 }
             }
+
+            val expandingDistanceMaps = generateSequence(initialDistances) { distances ->
+                val expandedDistances = distances
+                    .flatMap { (start, subDistances) ->
+                        subDistances.flatMap { (intermediate, distance) ->
+                            distances[intermediate]
+                                ?.map { (end, extraDistance) -> start to (end to (distance + extraDistance)) }
+                                ?: emptyList()
+                        }
+                    }
+                    .groupBy({ (start, _) -> start }) { (_, subDistances) -> subDistances }
+                    .mapValues { (_, endDistances) ->
+                        endDistances
+                            .groupBy({ (end, _) -> end }) { (_, distance) -> distance }
+                            .mapValues { (_, distances) -> distances.min() }
+                    }
+
+                // terminate once we've fully expanded the map
+                if (distances == expandedDistances) null else expandedDistances
+            }
+
+            expandingDistanceMaps
+                .last()
+                .flatMap { (start, ds) -> ds.map { (end, distance) -> (start to end) to distance } }
+                .toMap()
         }
 
         // restrict to points of interest only
         val pointsOfInterest = (this.filter { it.flowRate > 0 }.map { it.room } + "AA")
         return AdjacencyMap(
-            distances = allDistances
+            distances = distances
                 .filter { it.key.first in pointsOfInterest && it.key.second in pointsOfInterest },
             flowRates = this
                 .filter { it.room in pointsOfInterest }
@@ -55,9 +67,8 @@ fun main() {
             .toList()
 
         // keep track of best paths by unique signature, Pair(Room, OpenedValves)
-        val initialPathsBySignature = listOf(Path(minutes, 0, listOf("AA")))
-            .associateBy { Pair(it.path.last(), it.path.toSet()) }
-        val bestPathSignatureMaps = generateSequence(initialPathsBySignature) { bestPaths ->
+        val initialMap = mapOf(Pair("AA", emptySet<String>()) to Path(minutes, 0, listOf("AA")))
+        val bestPathSignatureMaps = generateSequence(initialMap) { bestPaths ->
             destinationRooms
                 .asSequence()
                 .flatMap { room ->
@@ -78,19 +89,21 @@ fun main() {
                     }
                 }
                 .plus(bestPaths.values)
-                .groupBy { Pair(it.path.last(), it.path.toSet()) }
-                .mapValues { (_, paths) -> paths.maxBy { it.pressure } }
+                .groupingBy { Pair(it.path.last(), it.path.toSet()) }
+                .aggregate { _, bestPathSoFar: Path?, path, _ ->
+                    listOfNotNull(bestPathSoFar, path).maxBy { it.pressure }
+                }
         }
 
-        // every possible path covered when the set doesn't increase
+        // every possible path covered when the set doesn't increase in size
         val bestPathBySignature = bestPathSignatureMaps
             .windowed(2)
             .takeWhile { maps -> maps[1].size > maps[0].size }
             .map { maps -> maps[1] }
             .last()
         return bestPathBySignature.values
-            .groupBy { it.path.toSet() - "AA" }
-            .mapValues { (_, paths) -> paths.maxOf { it.pressure } }
+            .groupingBy { it.path.toSet() - "AA" }
+            .aggregate { _, pressure: Int?, path, _ -> maxOf(pressure ?: 0, path.pressure) }
     }
 
     fun part1(input: List<String>): Int {
@@ -99,14 +112,14 @@ fun main() {
 
     fun part2(input: List<String>): Int {
         val bestPressureByOpened = getBestPressureByOpened(input.parse().toAdjacencyMap(), 26)
-        val bestAntiPressureByOpened = bestPressureByOpened.keys.associateWith { opened ->
-            bestPressureByOpened.entries
-                .filter { (antiOpened, _) -> (opened intersect antiOpened).isEmpty() }
-                .maxOf { (_, pressure) -> pressure }
-        }
-        return bestPressureByOpened.keys.maxOf { opened ->
-            (bestPressureByOpened[opened] ?: 0) + (bestAntiPressureByOpened[opened] ?: 0)
-        }
+        val bestAntiPressureByOpened = bestPressureByOpened
+            .mapValues { (opened, _) ->
+                bestPressureByOpened.entries
+                    .filter { (antiOpened, _) -> (opened intersect antiOpened).isEmpty() }
+                    .maxOf { (_, pressure) -> pressure }
+            }
+        return bestPressureByOpened
+            .maxOf { (opened, pressure) -> pressure + (bestAntiPressureByOpened[opened] ?: 0) }
     }
 
     val testInput = readInput("Day16_test")

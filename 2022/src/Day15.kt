@@ -28,7 +28,7 @@ fun main() {
 
             x = (c1 + c2) / 2
             y = (c1 - c2) / y
-        
+
         */
 
         val c1 = run {

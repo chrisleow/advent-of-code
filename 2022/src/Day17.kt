@@ -1,156 +1,147 @@
-import java.util.PriorityQueue
-
 fun main() {
 
-    data class Valve(
-        val room: String,
-        val flowRate: Int,
-        val linkedRooms: List<String>,
-    )
-    data class State(
-        val remaining: Int,
-        val rooms: List<String>,
-        val openedValves: Set<String>,
-        val flowRate: Int,
-        val pressureReleased: Int,
-        val previous: State?,
+    data class Point(val x: Int, val y: Long)
+    data class State(val top: Set<Point>, val jets: String, val jetIndex: Int, val shapeIndex: Int, val count: Int)
+    data class StateSignature(val top: Set<Point>, val jetIndex: Int, val shapeIndex: Int)
+
+    fun List<String>.parse() = State(
+        top = (0..6).map { Point(it, 0) }.toSet(),
+        jets = this.joinToString("").filter { it in "<>" },
+        jetIndex = 0,
+        shapeIndex = 0,
+        count = 0
     )
 
-    fun List<String>.parse(): List<Valve> {
-        val regex = ".*([A-Z]{2}).*=(\\d+).*valves?\\s+([A-Z, ]+)".toRegex()
-        return this
-            .mapNotNull { line -> regex.matchEntire(line)?.groupValues }
-            .map { gv -> Valve(gv[1], gv[2].toInt(), gv[3].split(",").map { it.trim() }) }
-    }
-
-    fun <T, R> List<T>.crossFlatMap(block: (T) -> Iterable<R>): Sequence<List<R>> = sequence {
-        val list = this@crossFlatMap
-        if (list.isEmpty()) {
-            yield(emptyList())
-        } else {
-            block(list.first()).forEach { mappedValue ->
-                val mappedValueList = listOf(mappedValue)
-                list.drop(1).crossFlatMap(block).forEach { yield(mappedValueList + it) }
-            }
-        }
-    }
-
-    fun State.generateMoves(valveByRoom: Map<String, Valve>) = sequence {
-        val state = this@generateMoves
-        if (state.remaining <= 0) {
-            return@sequence
-        }
-
-        fun getMoves(room: String) = sequence {
-            val valve = valveByRoom[room] ?: error("shouldn't get here.")
-
-            // open a valve
-            if (valve.room !in openedValves && valve.flowRate > 0) {
-                yield(room to valve.flowRate)
-            }
-
-            // traverse
-            valve.linkedRooms.forEach { linkedRoom ->
-                yield(linkedRoom to 0)
-            }
-
-            // do nothing
-            yield(room to 0)
-        }
-
-        state.rooms
-            .crossFlatMap { getMoves(it).toList() }
-            .forEach { moves ->
-                yield(
-                    state.copy(
-                        remaining = remaining - 1,
-                        rooms = moves.map { (r, _) -> r },
-                        openedValves = openedValves + moves.filter { (_, f) -> f > 0 }.map { (r, _) -> r },
-                        flowRate = flowRate + moves.distinct().sumOf { (_, f) -> f },
-                        pressureReleased = pressureReleased + flowRate,
-                        previous = state,
-                    )
-                )
-            }
-    }
-
-    fun generateStates(valves: List<Valve>, startRooms: List<String>, minutes: Int): Sequence<State> {
-        val valveByRoom = valves.associateBy { it.room }
-
-        // generational promotion
-        val initialStates = sequenceOf(
-            State(minutes, startRooms, emptySet(), 0, 0, null)
+    val shapes = run {
+        val templates = listOf(
+            """
+                ####
+            """.trimIndent(),
+            """
+                .#.
+                ###
+                .#.
+            """.trimIndent(),
+            """
+                ..#
+                ..#
+                ###
+            """.trimIndent(),
+            """
+                #
+                #
+                #
+                #
+            """.trimIndent(),
+            """
+                ##
+                ##
+            """.trimIndent(),
         )
-        val statesGenerations = generateSequence(initialStates) { states ->
-            print(".")
-            states
-                .flatMap { state -> state.generateMoves(valveByRoom) }
-                .distinct()
-                .sortedByDescending { state -> state.pressureReleased }
-                .take(10_000)
+
+        templates.map { template ->
+            val points = template
+                .split("\n")
+                .flatMapIndexed { minusY, line ->
+                    line.mapIndexedNotNull { x, char -> if (char == '#') Point(x, -minusY.toLong()) else null }
+                }
+
+            val minX = points.minOf { it.x }
+            val minY = points.minOf { it.y }
+            points.map { (x, y) -> Point(x - minX, y - minY) }
         }
-        println()
-        return statesGenerations.flatten()
-
-
-//        val queue = PriorityQueue<State>(compareByDescending { it.remaining })
-//        queue.add(State(minutes, startRooms, emptySet(), 0, 0, null))
-//
-//        val maxPressureReleasedByRooms = mutableMapOf<Set<String>, Int>()
-//
-//        while (queue.isNotEmpty()) {
-//            val currentState = queue.remove() ?: return@sequence
-//            yield(currentState)
-//
-//            // optimisation to prune the tree, don't navigate to known states apart from to "do nothing"
-//            // val signature = (currentState.rooms.toSet() to currentState.openedValves)
-//            val rooms = currentState.rooms.toSet()
-//            val maxPressureReleasedSoFar = maxPressureReleasedByRooms[rooms] ?: -1
-//            if (currentState.pressureReleased <= maxPressureReleasedSoFar) {
-//                continue
-//            } else {
-//                maxPressureReleasedByRooms[rooms] = currentState.pressureReleased
-//            }
-//
-//            currentState
-//                .generateMoves(valveByRoom)
-//                .forEach { queue.add(it) }
-//        }
     }
 
-    fun part1(input: List<String>): Int {
-        val finalState = generateStates(input.parse(), listOf("AA"), 30)
-            .maxBy { it.pressureReleased }
+    fun State.next(): State {
+        fun List<Point>.anyCollision() = this.any { point -> point.x < 0 || point.x > 6 || point in top }
 
-        generateSequence(finalState) { it.previous }
-            .toList()
-            .reversed()
-            .forEach {
-                println("Remaining ${it.remaining}: Rooms ${it.rooms.joinToString(", ")}, Pressure: ${it.pressureReleased}.")
+        tailrec fun getRestingPlace(points: List<Point>, currentJetIndex: Int): Pair<List<Point>, Int> {
+            val nextJetIndex = (currentJetIndex + 1) % jets.length
+
+            // apply jet
+            val shiftedPoints = when (jets[currentJetIndex]) {
+                '<' -> points.map { p -> p.copy(x = p.x - 1) }
+                '>' -> points.map { p -> p.copy(x = p.x + 1) }
+                else -> error("should not get here")
+            }
+            val maybeShiftedPoints = if (shiftedPoints.anyCollision()) points else shiftedPoints
+
+            // drop one
+            val droppedPoints = maybeShiftedPoints.map { p -> p.copy(y = p.y - 1) }
+            if (droppedPoints.anyCollision()) {
+                return maybeShiftedPoints to nextJetIndex
             }
 
-        return finalState.pressureReleased
+            return getRestingPlace(droppedPoints, nextJetIndex)
+        }
+
+        val startHeight = top.maxOf { it.y } + 4
+        val startRockPoints = shapes[shapeIndex].map { p -> Point(p.x + 2, p.y + startHeight) }
+        val (restingPoints, newJetsIndex) = getRestingPlace(startRockPoints, jetIndex)
+
+        return this.copy(
+            top = run {
+                val newTop = top + restingPoints
+                val floor = newTop.maxOf { it.y } - 100
+                newTop.filter { it.y >= floor }.toSet()
+            },
+            jetIndex = newJetsIndex,
+            shapeIndex = (shapeIndex + 1) % shapes.size,
+            count = count + 1,
+        )
     }
 
-    fun part2(input: List<String>): Int {
-        val finalState = generateStates(input.parse(), listOf("AA", "AA"), 26)
-            .maxBy { it.pressureReleased }
+    fun State.toSignature() = StateSignature(
+        top = run {
+            val minY = top.minOf { it.y }
+            top.map { it.copy(y = it.y - minY) }.toSet()
+        },
+        jetIndex = jetIndex,
+        shapeIndex = shapeIndex,
+    )
 
-        generateSequence(finalState) { it.previous }
-            .toList()
-            .reversed()
-            .forEach {
-                println("Remaining ${it.remaining}: Rooms ${it.rooms.joinToString(", ")}, Pressure: ${it.pressureReleased}.")
+    fun part1(input: List<String>): Long {
+        val finalState = generateSequence(input.parse()) { it.next() }
+            .first { it.count == 2022 }
+        return finalState.top.maxOf { it.y }
+    }
+
+    fun part2(input: List<String>): Long {
+        val stateBySignature = mutableMapOf<StateSignature, State>()
+
+        // look for equivalent states
+        var cycleStartOrNull: State? = null
+        var cycleEndOrNull: State? = null
+        for (state in generateSequence(input.parse()) { it.next() }) {
+            val signature = state.toSignature()
+            when (val previous = stateBySignature[signature]) {
+                null -> stateBySignature[signature] = state
+                else -> {
+                    cycleStartOrNull = previous
+                    cycleEndOrNull = state
+                    break
+                }
             }
+        }
 
-        return finalState.pressureReleased
+        val cycleStartState = cycleStartOrNull ?: error("shouldn't get here")
+        val cycleEndState = cycleEndOrNull ?: error("shouldn't get here")
+        val cycleDeltaY = cycleEndState.top.maxOf { it.y } - cycleStartState.top.maxOf { it.y }
+        val cycles = (1_000_000_000_000L - cycleStartState.count) / (cycleEndState.count - cycleStartState.count)
+        val offset = (1_000_000_000_000L - cycleStartState.count) % (cycleEndState.count - cycleStartState.count)
+
+        val offsetState = generateSequence(cycleStartState) { it.next() }
+            .first { it.count == cycleStartState.count + offset.toInt() }
+        val offsetDeltaY = offsetState.top.maxOf { it.y } - cycleStartState.top.maxOf { it.y }
+
+        return cycleStartState.top.maxOf { it.y } + (cycleDeltaY * cycles) + offsetDeltaY
     }
 
-    val testInput = readInput("Day16_test")
-    check(part1(testInput) == 1651)
-    // check(part2(testInput) == 1707)
+    val testInput = readInput("Day17_test")
+    check(part1(testInput) == 3068L)
+    check(part2(testInput) == 1514285714288L)
 
-//    val input = readInput("Day16")
-//    println("Part 1: ${part1(input)}")
-//    println("Part 2: ${part2(input)}")
+    val input = readInput("Day17")
+    println("Part 1: ${part1(input)}")
+    println("Part 2: ${part2(input)}")
 }

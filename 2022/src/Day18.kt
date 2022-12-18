@@ -24,31 +24,21 @@ fun main() {
         val yRange = (points.minOf { it.y } - 1 .. points.maxOf { it.y } + 1)
         val zRange = (points.minOf { it.z } - 1 .. points.maxOf { it.z } + 1)
 
-        tailrec fun expand(surrounding: Set<Point>): Set<Point> {
-            val newSurrounding = surrounding
-                .flatMap { it.getAdjacent() + it }
-                .filter { it.x in xRange && it.y in yRange && it.z in zRange && it !in points }
-                .toSet()
-            return if (surrounding.size == newSurrounding.size) {
+        tailrec fun fill(surrounding: Set<Point>, edge: Set<Point>): Set<Point> {
+            return if (edge.isEmpty()) {
                 surrounding
             } else {
-                expand(newSurrounding)
+                val newEdge = edge
+                    .asSequence()
+                    .flatMap { it.getAdjacent() }
+                    .filter { it.x in xRange && it.y in yRange && it.z in zRange && it !in points }
+                    .filter { it !in points && it !in edge && it !in surrounding }
+                    .toSet()
+                fill(surrounding + edge, newEdge)
             }
         }
 
-        val initialSurrounding = run {
-            val boundaries = listOf(
-                xRange.flatMap { x -> yRange.map { y -> Point(x, y, zRange.first) } },
-                xRange.flatMap { x -> yRange.map { y -> Point(x, y, zRange.last) } },
-                xRange.flatMap { x -> zRange.map { z -> Point(x, yRange.first, z) } },
-                xRange.flatMap { x -> zRange.map { z -> Point(x, yRange.last, z) } },
-                yRange.flatMap { y -> zRange.map { z -> Point(zRange.first, y, z) } },
-                yRange.flatMap { y -> zRange.map { z -> Point(zRange.last, y, z) } },
-            )
-            boundaries.flatten().toSet()
-        }
-
-        return expand(initialSurrounding)
+        return fill(emptySet(), setOf(Point(xRange.first, yRange.first, zRange.first)))
     }
 
     fun part1(input: List<String>): Int {

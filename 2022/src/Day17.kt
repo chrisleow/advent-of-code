@@ -107,34 +107,32 @@ fun main() {
     }
 
     fun part2(input: List<String>): Long {
-        val stateBySignature = mutableMapOf<StateSignature, State>()
 
-        // look for equivalent states
-        var cycleStartOrNull: State? = null
-        var cycleEndOrNull: State? = null
-        for (state in generateSequence(input.parse()) { it.next() }) {
-            val signature = state.toSignature()
-            when (val previous = stateBySignature[signature]) {
-                null -> stateBySignature[signature] = state
-                else -> {
-                    cycleStartOrNull = previous
-                    cycleEndOrNull = state
-                    break
+        // use a mutable map for efficiency, would use efficient immutable collections if I had any
+        fun findCycle(): Pair<State, State> {
+            tailrec fun find(seenStates: MutableMap<StateSignature, State>, state: State): Pair<State, State> {
+                val signature = state.toSignature()
+                return when (val previous = seenStates[signature]) {
+                    null -> find(seenStates.also { it[signature] = state}, state.next())
+                    else -> (previous to state)
                 }
             }
+            return find(mutableMapOf(), input.parse())
         }
 
-        val cycleStartState = cycleStartOrNull ?: error("shouldn't get here")
-        val cycleEndState = cycleEndOrNull ?: error("shouldn't get here")
-        val cycleDeltaY = cycleEndState.top.maxOf { it.y } - cycleStartState.top.maxOf { it.y }
+        val (cycleStartState, cycleEndState) = findCycle()
+        val cycleStartHeight = cycleStartState.top.maxOf { it.y }
+        val cycleEndHeight = cycleEndState.top.maxOf { it.y }
         val cycles = (1_000_000_000_000L - cycleStartState.count) / (cycleEndState.count - cycleStartState.count)
         val offset = (1_000_000_000_000L - cycleStartState.count) % (cycleEndState.count - cycleStartState.count)
 
-        val offsetState = generateSequence(cycleStartState) { it.next() }
-            .first { it.count == cycleStartState.count + offset.toInt() }
-        val offsetDeltaY = offsetState.top.maxOf { it.y } - cycleStartState.top.maxOf { it.y }
-
-        return cycleStartState.top.maxOf { it.y } + (cycleDeltaY * cycles) + offsetDeltaY
+        val offsetState = generateSequence(cycleStartState) { it.next() }.first {
+            it.count == cycleStartState.count + offset.toInt()
+        }
+        val offsetDeltaY = offsetState.top.maxOf { it.y } - cycleStartHeight
+        return cycleStartState.top.maxOf { it.y } +
+                ((cycleEndHeight - cycleStartHeight) * cycles) +
+                offsetDeltaY
     }
 
     val testInput = readInput("Day17_test")

@@ -97,7 +97,7 @@ fun main() {
             return numbers.fold(0) { acc, n -> (acc * 100) + n }
         }
 
-        // tail recursive breadth-first search
+        // optimised breadth-first search
         tailrec fun fill(best: Map<PathSignature, List<Path>>): Map<PathSignature, List<Path>> {
             val newBest = best
                 .flatMap { (_, paths) -> paths.flatMap { it.getNext(blueprint) } }
@@ -105,10 +105,10 @@ fun main() {
                 .mapValues { (_, paths) ->
                     // note: this seems to work at the top 3 paths even, but is absolutely horrible
                     // algorithmically ...
-                    paths.sortedByDescending { it.getFitness()}.take(5)
+                    paths.sortedByDescending { it.getFitness() }.take(3)
                 }
-            return when (newBest) {
-                best -> best
+            return when (newBest.keys) {
+                best.keys -> best
                 else -> fill(newBest)
             }
         }
@@ -121,14 +121,14 @@ fun main() {
 
     fun part1(input: List<String>): Int {
         val blueprints = input.parse()
-        return blueprints.sumOf { bp -> bp.id * getMaxGeodes(bp, 24) }
+        return blueprints
+            .sumOf { bp -> bp.id * getMaxGeodes(bp, 24) }
     }
 
     fun part2(input: List<String>): Int {
         val blueprints = input.parse().take(3)
         return blueprints
-            .map { bp -> getMaxGeodes(bp, 32) }
-            .reduce { a, b -> a * b }
+            .fold(1) { product, bp -> product * getMaxGeodes(bp, 32) }
     }
 
     val testInput = readInput("Day19_test")

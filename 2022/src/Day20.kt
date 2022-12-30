@@ -23,18 +23,10 @@ fun main() {
         return CircularLinkedList(nodes, nodes.size)
     }
 
-    fun CircularLinkedList.toDebugString(): String {
-        return generateSequence(nodes.first()) { it.next }
-            .take(size)
-            .joinToString(", ") { it.number.toString() }
-    }
-
     tailrec fun CircularLinkedList.navigate(node: Node, displacement: Long): Node {
         return when (displacement) {
-            in Long.MIN_VALUE .. -size -> navigate(node, displacement % (size - 1))
-            in -size .. -1L -> navigate(node.prev, displacement + 1)
-            in size .. Long.MAX_VALUE -> navigate(node, displacement % (size - 1))
-            in 1L until size -> navigate(node.next, displacement - 1)
+            in Long.MIN_VALUE .. -1L -> navigate(node.prev, displacement + 1)
+            in 1L .. Long.MAX_VALUE -> navigate(node.next, displacement - 1)
             else -> node
         }
     }
@@ -47,8 +39,8 @@ fun main() {
             node.next.prev = node.prev
 
             // find new insert site
-            val prev = navigate(node.prev, node.number)
-            val next = navigate(node.next, node.number)
+            val prev = navigate(node.prev, node.number % (size - 1))
+            val next = navigate(node.next, node.number % (size - 1))
             prev.next = node
             node.prev = prev
             node.next = next

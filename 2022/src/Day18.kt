@@ -10,7 +10,7 @@ fun main() {
             .toSet()
     }
 
-    fun Point.getAdjacent() = listOf(
+    fun Point.getNeighbours() = listOf(
         copy(x = x - 1),
         copy(x = x + 1),
         copy(y = y - 1),
@@ -30,7 +30,7 @@ fun main() {
             } else {
                 val newEdge = edge
                     .asSequence()
-                    .flatMap { it.getAdjacent() }
+                    .flatMap { it.getNeighbours() }
                     .filter { it.x in xRange && it.y in yRange && it.z in zRange && it !in points }
                     .filter { it !in points && it !in edge && it !in surrounding }
                     .toSet()
@@ -44,7 +44,7 @@ fun main() {
     fun part1(input: List<String>): Int {
         val points = input.parse()
         return points
-            .flatMap { p -> p.getAdjacent().map { p2 -> (p to p2) } }
+            .flatMap { p -> p.getNeighbours().map { p2 -> (p to p2) } }
             .count { (_, p2) -> p2 !in points }
     }
 
@@ -52,7 +52,7 @@ fun main() {
         val points = input.parse()
         val surrounding = getSurrounding(points)
         return points
-            .flatMap { p -> p.getAdjacent().map { p2 -> (p to p2) } }
+            .flatMap { p -> p.getNeighbours().map { p2 -> (p to p2) } }
             .count { (_, p2) -> p2 in surrounding }
     }
 

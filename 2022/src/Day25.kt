@@ -45,8 +45,7 @@ fun main() {
     }
 
     fun part1(input: List<String>): String {
-        val total = input.parse().sumOf { readSNAFU(it) }
-        return writeSNAFU(total)
+        return writeSNAFU(input.parse().sumOf { readSNAFU(it) })
     }
 
     val testInput = readInput("Day25_test")

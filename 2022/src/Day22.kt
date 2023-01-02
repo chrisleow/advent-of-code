@@ -78,7 +78,6 @@ fun main() {
 
     fun NavMap.toCube(): NavMap {
 
-        // try and map faces to points
         data class Point3(val x: Int, val y: Int, val z: Int)
         data class CornerMapping(val p2: Point2, val p3: Point3)
         data class FaceMapping(
@@ -90,112 +89,67 @@ fun main() {
 
         val width = minOf(
             points.groupingBy { it.x }.eachCount().minOf { it.value },
-            points.groupingBy { it.y }.eachCount().maxOf { it.value },
+            points.groupingBy { it.y }.eachCount().minOf { it.value },
         )
 
         fun p2(x: Int, y: Int) = Point2(x, y)
         fun p3(x: Int, y: Int, z: Int) = Point3(x, y, z)
         fun cm(p2: Point2, p3: Point3) = CornerMapping(p2, p3)
 
-        fun FaceMapping.corner2s() = listOf(topLeft, topRight, bottomLeft, bottomRight)
-            .map { (p2, _) -> p2 }
-            .toSet()
+        fun FaceMapping.corner2s() = listOf(topLeft, topRight, bottomLeft, bottomRight).map { (p2, _) -> p2 }
+        fun FaceMapping.corner3s() = listOf(topLeft, topRight, bottomLeft, bottomRight).map { (_, p3) -> p3 }
+        fun Point3.distance(other: Point3) = abs(x - other.x) + abs(y - other.y) + abs(z - other.z)
 
-        fun FaceMapping.corner3s() = listOf(topLeft, topRight, bottomLeft, bottomRight)
-            .map { (_, p3) -> p3 }
-            .toSet()
-
-        // specify all faces manually, use this to filter appropriate faces later
-        val allFacePoint3s = listOf(
-            setOf(p3(0, 0, 0), p3(0, 0, 1), p3(0, 1, 0), p3(0, 1, 1)),
-            setOf(p3(1, 0, 0), p3(1, 0, 1), p3(1, 1, 0), p3(1, 1, 1)),
-            setOf(p3(0, 0, 0), p3(0, 0, 1), p3(1, 0, 0), p3(1, 0, 1)),
-            setOf(p3(0, 1, 0), p3(0, 1, 1), p3(1, 1, 0), p3(1, 1, 1)),
-            setOf(p3(0, 0, 0), p3(0, 1, 0), p3(1, 0, 0), p3(1, 1, 0)),
-            setOf(p3(0, 0, 1), p3(0, 1, 1), p3(1, 0, 1), p3(1, 1, 1)),
-        )
+        val allPoint3s = (0 .. 1).flatMap { x ->
+            (0 .. 1).flatMap { y ->
+                (0 .. 1).map { z -> Point3(x, y, z) }
+            }
+        }
 
         // given a face and an edge, find the adjoining face mappings
         fun getNeighbourMappings(mapping: FaceMapping): List<FaceMapping> {
-            val empty3 = Point3(-1, -1, -1)
             fun Point2.up() = copy(y = y - width)
             fun Point2.down() = copy(y = y + width)
             fun Point2.left() = copy(x = x - width)
             fun Point2.right() = copy(x = x + width)
 
+            fun inferCorner(anchor: Point3, disallowed: List<Point3>) =
+                allPoint3s.first { it.distance(anchor) == 1 && it !in disallowed }
+
             // fill out everything we know from translating a face up, down, left or right, we
-            // know everything except two corner points in 3d.
-            val partialFaceMappings = run {
-                val (tl2, tl3) = mapping.topLeft
-                val (tr2, tr3) = mapping.topRight
-                val (bl2, bl3) = mapping.bottomLeft
-                val (br2, br3) = mapping.bottomRight
+            // know everything except two corner points in 3D, which we can infer
+            val (tl2, tl3) = mapping.topLeft
+            val (tr2, tr3) = mapping.topRight
+            val (bl2, bl3) = mapping.bottomLeft
+            val (br2, br3) = mapping.bottomRight
+            val disallowed = mapping.corner3s()
 
-                listOf(
-                    FaceMapping(
-                        topLeft = cm(tl2.up(), empty3),
-                        topRight = cm(tr2.up(), empty3),
-                        bottomLeft = cm(bl2.up(), tl3),
-                        bottomRight = cm(br2.up(), tr3),
-                    ),
-                    FaceMapping(
-                        topLeft = cm(tl2.down(), bl3),
-                        topRight = cm(tr2.down(), br3),
-                        bottomLeft = cm(bl2.down(), empty3),
-                        bottomRight = cm(br2.down(), empty3),
-                    ),
-                    FaceMapping(
-                        topLeft = cm(tl2.left(), empty3),
-                        topRight = cm(tr2.left(), tl3),
-                        bottomLeft = cm(bl2.left(), empty3),
-                        bottomRight = cm(br2.left(), bl3),
-                    ),
-                    FaceMapping(
-                        topLeft = cm(tl2.right(), tr3),
-                        topRight = cm(tr2.right(), empty3),
-                        bottomLeft = cm(bl2.right(), br3),
-                        bottomRight = cm(br2.right(), empty3),
-                    ),
-                )
-            }
-
-            // find the other cube face that straddles the partial edge defined by this mapping, use this
-            // to fill out ther emaining corner points
-            return partialFaceMappings.map { partialMapping ->
-                val edgePoints = partialMapping
-                    .corner3s()
-                    .filter { it != empty3}
-                    .toSet()
-                val otherCornerPoint3s = allFacePoint3s
-                    .filter { facePoint3s -> edgePoints.all { it in facePoint3s } }
-                    .first { facePoint3s -> (facePoint3s - mapping.corner3s()).any() }
-                    .minus(edgePoints)
-
-                // given the remaining corner points, try to work out what the corner actually is
-                fun inferCorner(candidate: Point3, corner0: Point3, corner1: Point3): Point3 {
-                    return if (candidate != empty3) {
-                        candidate
-                    } else {
-                        val nonEmptyCorners = listOf(corner0, corner1).filter { it != empty3 }
-                        otherCornerPoint3s.first { oc3 ->
-                            nonEmptyCorners.all { c3 ->
-                                (abs(oc3.x - c3.x) + abs(oc3.y - c3.y) + abs(oc3.z - c3.z)) == 1
-                            }
-                        }
-                    }
-                }
-
-                val (tl2, tl3) = partialMapping.topLeft
-                val (tr2, tr3) = partialMapping.topRight
-                val (bl2, bl3) = partialMapping.bottomLeft
-                val (br2, br3) = partialMapping.bottomRight
+            return listOf(
                 FaceMapping(
-                    topLeft = cm(tl2, inferCorner(tl3, bl3, tr3)),
-                    topRight = cm(tr2, inferCorner(tr3, tl3, br3)),
-                    bottomLeft = cm(bl2, inferCorner(bl3, tl3, br3)),
-                    bottomRight = cm(br2, inferCorner(br3, bl3, tr3)),
-                )
-            }
+                    topLeft = cm(tl2.up(), inferCorner(tl3, disallowed)),
+                    topRight = cm(tr2.up(), inferCorner(tr3, disallowed)),
+                    bottomLeft = cm(bl2.up(), tl3),
+                    bottomRight = cm(br2.up(), tr3),
+                ),
+                FaceMapping(
+                    topLeft = cm(tl2.down(), bl3),
+                    topRight = cm(tr2.down(), br3),
+                    bottomLeft = cm(bl2.down(), inferCorner(bl3, disallowed)),
+                    bottomRight = cm(br2.down(), inferCorner(br3, disallowed)),
+                ),
+                FaceMapping(
+                    topLeft = cm(tl2.left(), inferCorner(tl3, disallowed)),
+                    topRight = cm(tr2.left(), tl3),
+                    bottomLeft = cm(bl2.left(), inferCorner(bl3, disallowed)),
+                    bottomRight = cm(br2.left(), bl3),
+                ),
+                FaceMapping(
+                    topLeft = cm(tl2.right(), tr3),
+                    topRight = cm(tr2.right(), inferCorner(tr3, disallowed)),
+                    bottomLeft = cm(bl2.right(), br3),
+                    bottomRight = cm(br2.right(), inferCorner(br3, disallowed)),
+                ),
+            )
         }
 
         tailrec fun getFaceMappings(mappings: List<FaceMapping>): List<FaceMapping> {
@@ -225,17 +179,18 @@ fun main() {
             }
         )
 
+        // find correlating edges, in both directions for ease of mapping / filtering
         val bidirectionalEdgePairs = mappings
-            .flatMap { mapping ->
+            .flatMap {
                 listOf(
-                    mapping.topLeft to mapping.topRight,
-                    mapping.topLeft to mapping.bottomLeft,
-                    mapping.topRight to mapping.topLeft,
-                    mapping.topRight to mapping.bottomRight,
-                    mapping.bottomLeft to mapping.topLeft,
-                    mapping.bottomLeft to mapping.bottomRight,
-                    mapping.bottomRight to mapping.bottomLeft,
-                    mapping.bottomRight to mapping.topRight,
+                    it.topLeft to it.topRight,
+                    it.topLeft to it.bottomLeft,
+                    it.topRight to it.topLeft,
+                    it.topRight to it.bottomRight,
+                    it.bottomLeft to it.topLeft,
+                    it.bottomLeft to it.bottomRight,
+                    it.bottomRight to it.bottomLeft,
+                    it.bottomRight to it.topRight,
                 )
             }
             .groupBy { (cm0, cm1) -> cm0.p3 to cm1.p3 }

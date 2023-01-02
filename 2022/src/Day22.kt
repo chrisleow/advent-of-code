@@ -3,7 +3,6 @@ import kotlin.math.abs
 fun main() {
 
     data class Point2(val x: Int, val y: Int)
-    data class Portal(val outPoint: Point2, val outDirection: Char, val inPoint: Point2, val inDirection: Char)
     data class NavState(val point: Point2, val direction: Char)
     data class NavMap(
         val points: Set<Point2>,
@@ -58,20 +57,17 @@ fun main() {
             .groupBy { it.x }
             .mapValues { (_, ps) -> ps.minOf { it.y } .. ps.maxOf { it.y } }
         return copy(
-            portals = run {
-                val portals = sequence {
-                    minMaxXs.forEach { (y, xRange) ->
-                        val (minX, maxX) = Pair(xRange.first, xRange.last)
-                        yield(Portal(Point2(minX, y), '<', Point2(maxX, y), '<'))
-                        yield(Portal(Point2(maxX, y), '>', Point2(minX, y), '>'))
-                    }
-                    minMaxYs.forEach { (x, yRange) ->
-                        val (minY, maxY) = Pair(yRange.first, yRange.last)
-                        yield(Portal(Point2(x, minY), '^', Point2(x, maxY), '^'))
-                        yield(Portal(Point2(x, maxY), 'v', Point2(x, minY), 'v'))
-                    }
+            portals = buildMap {
+                minMaxXs.forEach { (y, xRange) ->
+                    val (minX, maxX) = Pair(xRange.first, xRange.last)
+                    put(NavState(Point2(minX, y), '<'), NavState(Point2(maxX, y), '<'))
+                    put(NavState(Point2(maxX, y), '>'), NavState(Point2(minX, y), '>'))
                 }
-                portals.associate { NavState(it.outPoint, it.outDirection) to NavState(it.inPoint, it.inDirection) }
+                minMaxYs.forEach { (x, yRange) ->
+                    val (minY, maxY) = Pair(yRange.first, yRange.last)
+                    put(NavState(Point2(x, minY), '^'), NavState(Point2(x, maxY), '^'))
+                    put(NavState(Point2(x, maxY), 'v'), NavState(Point2(x, minY), 'v'))
+                }
             }
         )
     }
@@ -155,8 +151,7 @@ fun main() {
         tailrec fun getFaceMappings(mappings: List<FaceMapping>): List<FaceMapping> {
             val newMappings = mappings
                 .flatMap { mapping -> getNeighbourMappings(mapping) }
-                .filter { mapping -> mapping.corner2s().all { it in points } }
-                .filter { mapping -> mapping !in mappings }
+                .filter { mapping -> mapping.corner2s().all { it in points } && mapping !in mappings }
             return if (newMappings.isEmpty()) {
                 mappings
             } else {
@@ -215,42 +210,32 @@ fun main() {
             }
         }
 
-        // we now have faces mapped to edges on a cube, to infer where the "portals" are
+        // we now have faces mapped to edges on a cube, to infer where the "portals" are, also use
+        // the middle point of a line to figure out what the in / out directions are.
         return copy(
-            portals = bidirectionalEdgePairs
-                .flatMap { edgePairs ->
+            portals = buildMap {
+                bidirectionalEdgePairs.forEach { edgePairs ->
                     val (p0, p1) = edgePairs[0].first.p2 to edgePairs[0].second.p2
                     val (p2, p3) = edgePairs[1].first.p2 to edgePairs[1].second.p2
-                    sequence {
-                        val pm0 = p2((p0.x + p1.x) / 2, (p0.y + p1.y) / 2)
-                        val pm1 = p2((p2.x + p3.x) / 2, (p2.y + p3.y) / 2)
-                        val directions0 = getDirectionInOutPair(pm0)
-                        val directions1 = getDirectionInOutPair(pm1)
+                    val pm0 = p2((p0.x + p1.x) / 2, (p0.y + p1.y) / 2)
+                    val pm1 = p2((p2.x + p3.x) / 2, (p2.y + p3.y) / 2)
+                    val (direction0out, direction0in) = getDirectionInOutPair(pm0) ?: return@forEach
+                    val (direction1out, direction1in) = getDirectionInOutPair(pm1) ?: return@forEach
 
-                        // map these line connections to "portals"
-                        if (directions0 != null && directions1 != null) {
-                            val (direction0out, direction0in) = directions0
-                            val (direction1out, direction1in) = directions1
-                            getLinePoints(p0, p1)
-                                .zip(getLinePoints(p2, p3))
-                                .forEach { (sp0, sp1) ->
-                                    yield(Portal(sp0, direction0out, sp1, direction1in))
-                                    yield(Portal(sp1, direction1out, sp0, direction0in))
-                                }
+                    // map these line connections to "portals"
+                    getLinePoints(p0, p1)
+                        .zip(getLinePoints(p2, p3))
+                        .forEach { (sp0, sp1) ->
+                            put(NavState(sp0, direction0out), NavState(sp1, direction1in))
+                            put(NavState(sp1, direction1out), NavState(sp0, direction0in))
                         }
-                    }
                 }
-                .distinct()
-                .associate { NavState(it.outPoint, it.outDirection) to NavState(it.inPoint, it.inDirection) }
+            }
         )
     }
 
     fun navigate(map: NavMap, instructions: List<String>): NavState {
-        val initialState = NavState(
-            point = map.points.minBy { (it.y * 1000) + it.x },
-            direction = '>',
-        )
-
+        val initialState = NavState(map.points.minBy { (it.y * 1000) + it.x }, '>')
         return instructions.fold(initialState) { state, instruction ->
             when (instruction) {
                 "L", "R" -> {

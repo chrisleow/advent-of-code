@@ -4,11 +4,7 @@ fun main() {
 
     data class Point2(val x: Int, val y: Int)
     data class NavState(val point: Point2, val direction: Char)
-    data class NavMap(
-        val points: Set<Point2>,
-        val isWall: (Point2) -> Boolean,
-        val portals: Map<NavState, NavState>,
-    )
+    data class NavMap(val points: Set<Point2>, val isWall: (Point2) -> Boolean, val portals: Map<NavState, NavState>)
 
     fun List<String>.parse(): Pair<NavMap, List<String>> {
         val sections = this.split { it.isBlank() }
@@ -34,20 +30,6 @@ fun main() {
         val navMap = NavMap(wallPoints.keys, { wallPoints[it] ?: false }, emptyMap())
         return Pair(navMap, instructions)
     }
-
-    val directionChanges = mapOf(
-        '^' to mapOf("L" to '<', "R" to '>'),
-        'v' to mapOf("L" to '>', "R" to '<'),
-        '<' to mapOf("L" to 'v', "R" to '^'),
-        '>' to mapOf("L" to '^', "R" to 'v'),
-    )
-
-    val directionScores = mapOf(
-        '^' to 3,
-        'v' to 1,
-        '<' to 2,
-        '>' to 0,
-    )
 
     fun NavMap.toWrapped(): NavMap {
         val minMaxXs = points
@@ -88,13 +70,9 @@ fun main() {
             points.groupingBy { it.y }.eachCount().minOf { it.value },
         )
 
-        fun p2(x: Int, y: Int) = Point2(x, y)
-        fun p3(x: Int, y: Int, z: Int) = Point3(x, y, z)
-        fun cm(p2: Point2, p3: Point3) = CornerMapping(p2, p3)
-
         fun FaceMapping.corner2s() = listOf(topLeft, topRight, bottomLeft, bottomRight).map { (p2, _) -> p2 }
         fun FaceMapping.corner3s() = listOf(topLeft, topRight, bottomLeft, bottomRight).map { (_, p3) -> p3 }
-        fun Point3.distance(other: Point3) = abs(x - other.x) + abs(y - other.y) + abs(z - other.z)
+        fun distance(a: Point3, b: Point3) = abs(a.x - b.x) + abs(a.y - b.y) + abs(a.z - b.z)
 
         val allPoint3s = (0 .. 1).flatMap { x ->
             (0 .. 1).flatMap { y ->
@@ -110,7 +88,7 @@ fun main() {
             fun Point2.right() = copy(x = x + width)
 
             fun inferCorner(anchor: Point3, disallowed: List<Point3>) =
-                allPoint3s.first { it.distance(anchor) == 1 && it !in disallowed }
+                allPoint3s.first { distance(it, anchor) == 1 && it !in disallowed }
 
             // fill out everything we know from translating a face up, down, left or right, we
             // know everything except two corner points in 3D, which we can infer
@@ -122,28 +100,28 @@ fun main() {
 
             return listOf(
                 FaceMapping(
-                    topLeft = cm(tl2.up(), inferCorner(tl3, disallowed)),
-                    topRight = cm(tr2.up(), inferCorner(tr3, disallowed)),
-                    bottomLeft = cm(bl2.up(), tl3),
-                    bottomRight = cm(br2.up(), tr3),
+                    topLeft = CornerMapping(tl2.up(), inferCorner(tl3, disallowed)),
+                    topRight = CornerMapping(tr2.up(), inferCorner(tr3, disallowed)),
+                    bottomLeft = CornerMapping(bl2.up(), tl3),
+                    bottomRight = CornerMapping(br2.up(), tr3),
                 ),
                 FaceMapping(
-                    topLeft = cm(tl2.down(), bl3),
-                    topRight = cm(tr2.down(), br3),
-                    bottomLeft = cm(bl2.down(), inferCorner(bl3, disallowed)),
-                    bottomRight = cm(br2.down(), inferCorner(br3, disallowed)),
+                    topLeft = CornerMapping(tl2.down(), bl3),
+                    topRight = CornerMapping(tr2.down(), br3),
+                    bottomLeft = CornerMapping(bl2.down(), inferCorner(bl3, disallowed)),
+                    bottomRight = CornerMapping(br2.down(), inferCorner(br3, disallowed)),
                 ),
                 FaceMapping(
-                    topLeft = cm(tl2.left(), inferCorner(tl3, disallowed)),
-                    topRight = cm(tr2.left(), tl3),
-                    bottomLeft = cm(bl2.left(), inferCorner(bl3, disallowed)),
-                    bottomRight = cm(br2.left(), bl3),
+                    topLeft = CornerMapping(tl2.left(), inferCorner(tl3, disallowed)),
+                    topRight = CornerMapping(tr2.left(), tl3),
+                    bottomLeft = CornerMapping(bl2.left(), inferCorner(bl3, disallowed)),
+                    bottomRight = CornerMapping(br2.left(), bl3),
                 ),
                 FaceMapping(
-                    topLeft = cm(tl2.right(), tr3),
-                    topRight = cm(tr2.right(), inferCorner(tr3, disallowed)),
-                    bottomLeft = cm(bl2.right(), br3),
-                    bottomRight = cm(br2.right(), inferCorner(br3, disallowed)),
+                    topLeft = CornerMapping(tl2.right(), tr3),
+                    topRight = CornerMapping(tr2.right(), inferCorner(tr3, disallowed)),
+                    bottomLeft = CornerMapping(bl2.right(), br3),
+                    bottomRight = CornerMapping(br2.right(), inferCorner(br3, disallowed)),
                 ),
             )
         }
@@ -160,52 +138,48 @@ fun main() {
         }
 
         // fix one face, infer all other mappings
-        val mappings = getFaceMappings(
-            run {
-                val c2 = points.minBy { (it.y * 10000) + it.x }
+        val mappings = run {
+            val (x, y) = points.minBy { (it.y * 10000) + it.x }
+            val wMinus1 = width - 1
+            getFaceMappings(
                 listOf(
                     FaceMapping(
-                        topLeft = cm(c2, p3(0, 0, 0)),
-                        topRight = cm(c2.copy(x = c2.x + width - 1), p3(1, 0, 0)),
-                        bottomLeft = cm(c2.copy(y = c2.y + width - 1), p3(0, 1, 0)),
-                        bottomRight = cm(c2.copy(x = c2.x + width - 1, y = c2.y + width - 1), p3(1, 1, 0)),
+                        topLeft = CornerMapping(Point2(x, y), Point3(0, 0, 0)),
+                        topRight = CornerMapping(Point2(x + wMinus1, y), Point3(1, 0, 0)),
+                        bottomLeft = CornerMapping(Point2(x, y + wMinus1), Point3(0, 1, 0)),
+                        bottomRight = CornerMapping(Point2(x + wMinus1, y + wMinus1), Point3(1, 1, 0)),
                     )
                 )
-            }
-        )
+            )
+        }
 
         // find correlating edges, in both directions for ease of mapping / filtering
         val bidirectionalEdgePairs = mappings
             .flatMap {
-                listOf(
-                    it.topLeft to it.topRight,
-                    it.topLeft to it.bottomLeft,
-                    it.topRight to it.topLeft,
-                    it.topRight to it.bottomRight,
-                    it.bottomLeft to it.topLeft,
-                    it.bottomLeft to it.bottomRight,
-                    it.bottomRight to it.bottomLeft,
-                    it.bottomRight to it.topRight,
-                )
+                listOf(it.topLeft, it.topRight, it.bottomLeft, it.bottomRight).flatMap { corner0 ->
+                    listOf(it.topLeft, it.topRight, it.bottomLeft, it.bottomRight)
+                        .filter { corner1 -> distance(corner0.p3, corner1.p3) == 1 }
+                        .map { corner1 -> corner0 to corner1 }
+                }
             }
-            .groupBy { (cm0, cm1) -> cm0.p3 to cm1.p3 }
+            .groupBy { (corner1, corner2) -> corner1.p3 to corner2.p3 }
             .values
 
-        fun getLinePoints(p0: Point2, p1: Point2): List<Point2> {
-            val dx = maxOf(minOf(p1.x - p0.x, 1), -1)
-            val dy = maxOf(minOf(p1.y - p0.y, 1), -1)
-            val pointsUpToP1 = generateSequence(p0) { Point2(it.x + dx, it.y + dy) }
-                .takeWhile { it != p1 }
+        fun getLinePoints(p1: Point2, p2: Point2): List<Point2> {
+            val dx = maxOf(minOf(p2.x - p1.x, 1), -1)
+            val dy = maxOf(minOf(p2.y - p1.y, 1), -1)
+            val pointsUpToP1 = generateSequence(p1) { Point2(it.x + dx, it.y + dy) }
+                .takeWhile { it != p2 }
                 .toList()
-            return pointsUpToP1 + p1
+            return pointsUpToP1 + p2
         }
 
         fun getDirectionInOutPair(point: Point2): Pair<Char, Char>? {
             return when {
-                point.copy(x = point.x - 1) !in points -> '<' to '>'
-                point.copy(x = point.x + 1) !in points -> '>' to '<'
-                point.copy(y = point.y - 1) !in points -> '^' to 'v'
-                point.copy(y = point.y + 1) !in points -> 'v' to '^'
+                point.copy(x = point.x - 1) !in points -> '>' to '<'
+                point.copy(x = point.x + 1) !in points -> '<' to '>'
+                point.copy(y = point.y - 1) !in points -> 'v' to '^'
+                point.copy(y = point.y + 1) !in points -> '^' to 'v'
                 else -> null
             }
         }
@@ -215,19 +189,19 @@ fun main() {
         return copy(
             portals = buildMap {
                 bidirectionalEdgePairs.forEach { edgePairs ->
-                    val (p0, p1) = edgePairs[0].first.p2 to edgePairs[0].second.p2
-                    val (p2, p3) = edgePairs[1].first.p2 to edgePairs[1].second.p2
-                    val pm0 = p2((p0.x + p1.x) / 2, (p0.y + p1.y) / 2)
-                    val pm1 = p2((p2.x + p3.x) / 2, (p2.y + p3.y) / 2)
-                    val (direction0out, direction0in) = getDirectionInOutPair(pm0) ?: return@forEach
-                    val (direction1out, direction1in) = getDirectionInOutPair(pm1) ?: return@forEach
+                    val (p1, p2) = edgePairs[0].first.p2 to edgePairs[0].second.p2
+                    val (p3, p4) = edgePairs[1].first.p2 to edgePairs[1].second.p2
+                    val pm1 = Point2((p1.x + p2.x) / 2, (p1.y + p2.y) / 2)
+                    val pm2 = Point2((p3.x + p4.x) / 2, (p3.y + p4.y) / 2)
+                    val (direction1in, direction1out) = getDirectionInOutPair(pm1) ?: return@forEach
+                    val (direction2in, direction2out) = getDirectionInOutPair(pm2) ?: return@forEach
 
                     // map these line connections to "portals"
-                    getLinePoints(p0, p1)
-                        .zip(getLinePoints(p2, p3))
-                        .forEach { (sp0, sp1) ->
-                            put(NavState(sp0, direction0out), NavState(sp1, direction1in))
-                            put(NavState(sp1, direction1out), NavState(sp0, direction0in))
+                    getLinePoints(p1, p2)
+                        .zip(getLinePoints(p3, p4))
+                        .forEach { (sp1, sp2) ->
+                            put(NavState(sp1, direction1out), NavState(sp2, direction2in))
+                            put(NavState(sp2, direction2out), NavState(sp1, direction1in))
                         }
                 }
             }
@@ -236,6 +210,14 @@ fun main() {
 
     fun navigate(map: NavMap, instructions: List<String>): NavState {
         val initialState = NavState(map.points.minBy { (it.y * 1000) + it.x }, '>')
+
+        val directionChanges = mapOf(
+            '^' to mapOf("L" to '<', "R" to '>'),
+            'v' to mapOf("L" to '>', "R" to '<'),
+            '<' to mapOf("L" to 'v', "R" to '^'),
+            '>' to mapOf("L" to '^', "R" to 'v'),
+        )
+
         return instructions.fold(initialState) { state, instruction ->
             when (instruction) {
                 "L", "R" -> {
@@ -265,6 +247,13 @@ fun main() {
             }
         }
     }
+
+    val directionScores = mapOf(
+        '^' to 3,
+        'v' to 1,
+        '<' to 2,
+        '>' to 0,
+    )
 
     fun part1(input: List<String>): Int {
         val (map, instructions) = input.parse()

@@ -11,7 +11,7 @@ fun main() {
             .map { gv -> Pair(Point(gv[1].toInt(), gv[2].toInt()), Point(gv[3].toInt(), gv[4].toInt())) }
     }
 
-    fun Point.distanceTo(other: Point) = abs(x - other.x) + abs(y - other.y)
+    fun distance(a: Point, b: Point) = abs(a.x - b.x) + abs(a.y - b.y)
 
     fun getCrossingPoint(line1: Pair<Point, Point>, line2: Pair<Point, Point>): Point? {
         /*
@@ -70,7 +70,7 @@ fun main() {
         val scannerBeacons = input.parse()
         val exclusionRanges = scannerBeacons
             .map { (scanner, beacon) ->
-                val extraDistance = scanner.distanceTo(beacon) - abs(y - scanner.y)
+                val extraDistance = distance(scanner, beacon) - abs(y - scanner.y)
                 (scanner.x - extraDistance .. scanner.x + extraDistance)
             }
             .filter { range -> !range.isEmpty() }
@@ -95,18 +95,17 @@ fun main() {
     fun part2(input: List<String>, maxX: Int, maxY: Int): Long {
         val scannerDistances = input
             .parse()
-            .associate { (scanner, beacon) -> scanner to scanner.distanceTo(beacon) }
+            .associate { (scanner, beacon) -> scanner to distance(scanner, beacon) }
 
         val linesOfInterest = scannerDistances.entries
             .flatMap { (scanner, distance) -> scanner.getBoundaryLines(distance + 1) }
-
         val pointsOfInterest = linesOfInterest
             .flatMap { line1 -> linesOfInterest.mapNotNull { line2 -> getCrossingPoint(line1, line2) } }
             .filter { (x, y) -> x in (0 .. maxX) && y in (0 .. maxY) }
             .distinct()
 
         return pointsOfInterest
-            .filter { point -> scannerDistances.all { (scanner, distance) -> scanner.distanceTo(point) > distance } }
+            .filter { point -> scannerDistances.all { (scanner, distance) -> distance(scanner, point) > distance } }
             .map { (x, y) -> (x * 4000000L) + y }
             .single()
     }

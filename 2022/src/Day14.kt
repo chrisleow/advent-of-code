@@ -24,6 +24,8 @@ fun main() {
                 .windowed(2)
         }
 
+        fun biRange(a1: Int, a2: Int) = if (a1 < a2) a1 .. a2 else a2 .. a1
+
         return State(
             minX = segments.flatMap { (p1, p2) -> listOf(p1.x, p2.x) }.min(),
             maxX = segments.flatMap { (p1, p2) -> listOf(p1.x, p2.x) }.max(),
@@ -33,11 +35,11 @@ fun main() {
             currentSand = Point(500, 0),
             horizontalSegments = segments
                 .filter { (p1, p2) -> p1.y == p2.y }
-                .map { (p1, p2) -> p1.y to if (p1.x < p2.x) p1.x .. p2.x else p2.x .. p1.x }
+                .map { (p1, p2) -> p1.y to biRange(p1.x, p2.x) }
                 .groupBy({ (y, _) -> y }) { (_, range) -> range },
             verticalSegments = segments
                 .filter { (p1, p2) -> p1.x == p2.x }
-                .map { (p1, p2) -> p1.x to if (p1.y < p2.y) p1.y .. p2.y else p2.y .. p1.y }
+                .map { (p1, p2) -> p1.x to biRange(p1.y, p2.y) }
                 .groupBy({ (x, _) -> x }) { (_, range) -> range },
         )
     }

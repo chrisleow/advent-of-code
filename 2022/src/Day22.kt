@@ -31,6 +31,12 @@ fun main() {
         return Pair(navMap, instructions)
     }
 
+    fun <U, V> cross(items1: Iterable<U>, items2: Iterable<V>) =
+        items1.flatMap { i1 -> items2.map { i2 -> Pair(i1, i2) } }
+
+    fun <U, V, W> cross(items1: Iterable<U>, items2: Iterable<V>, items3: Iterable<W>) =
+        items1.flatMap { i1 -> items2.flatMap { i2 -> items3.map { i3 -> Triple(i1, i2, i3) } } }
+
     fun NavMap.toWrapped(): NavMap {
         val minMaxXs = points
             .groupBy { it.y }
@@ -63,22 +69,19 @@ fun main() {
             val topRight: CornerMapping,
             val bottomLeft: CornerMapping,
             val bottomRight: CornerMapping,
-        )
+        ) {
+            val corners = listOf(topLeft, topRight, bottomLeft, bottomRight)
+        }
 
         val width = minOf(
             points.groupingBy { it.x }.eachCount().minOf { it.value },
             points.groupingBy { it.y }.eachCount().minOf { it.value },
         )
 
-        fun FaceMapping.corner2s() = listOf(topLeft, topRight, bottomLeft, bottomRight).map { (p2, _) -> p2 }
-        fun FaceMapping.corner3s() = listOf(topLeft, topRight, bottomLeft, bottomRight).map { (_, p3) -> p3 }
-        fun distance(a: Point3, b: Point3) = abs(a.x - b.x) + abs(a.y - b.y) + abs(a.z - b.z)
+        val allPoint3s = cross(0 .. 1, 0 .. 1, 0 .. 1)
+            .map { (x, y, z) -> Point3(x, y,z) }
 
-        val allPoint3s = (0 .. 1).flatMap { x ->
-            (0 .. 1).flatMap { y ->
-                (0 .. 1).map { z -> Point3(x, y, z) }
-            }
-        }
+        fun distance(a: Point3, b: Point3) = abs(a.x - b.x) + abs(a.y - b.y) + abs(a.z - b.z)
 
         // given a face and an edge, find the adjoining face mappings
         fun getNeighbourMappings(mapping: FaceMapping): List<FaceMapping> {
@@ -96,7 +99,7 @@ fun main() {
             val (tr2, tr3) = mapping.topRight
             val (bl2, bl3) = mapping.bottomLeft
             val (br2, br3) = mapping.bottomRight
-            val disallowed = mapping.corner3s()
+            val disallowed = listOf(tl3, tr3, bl3, br3)
 
             return listOf(
                 FaceMapping(
@@ -129,7 +132,8 @@ fun main() {
         tailrec fun getFaceMappings(mappings: List<FaceMapping>): List<FaceMapping> {
             val newMappings = mappings
                 .flatMap { mapping -> getNeighbourMappings(mapping) }
-                .filter { mapping -> mapping.corner2s().all { it in points } && mapping !in mappings }
+                .filter { mapping -> mapping !in mappings }
+                .filter { mapping -> mapping.corners.all { it.p2 in points } }
             return if (newMappings.isEmpty()) {
                 mappings
             } else {
@@ -140,14 +144,14 @@ fun main() {
         // fix one face, infer all other mappings
         val mappings = run {
             val (x, y) = points.minBy { (it.y * 10000) + it.x }
-            val wMinus1 = width - 1
+            val wm1 = width - 1
             getFaceMappings(
                 listOf(
                     FaceMapping(
                         topLeft = CornerMapping(Point2(x, y), Point3(0, 0, 0)),
-                        topRight = CornerMapping(Point2(x + wMinus1, y), Point3(1, 0, 0)),
-                        bottomLeft = CornerMapping(Point2(x, y + wMinus1), Point3(0, 1, 0)),
-                        bottomRight = CornerMapping(Point2(x + wMinus1, y + wMinus1), Point3(1, 1, 0)),
+                        topRight = CornerMapping(Point2(x + wm1, y), Point3(1, 0, 0)),
+                        bottomLeft = CornerMapping(Point2(x, y + wm1), Point3(0, 1, 0)),
+                        bottomRight = CornerMapping(Point2(x + wm1, y + wm1), Point3(1, 1, 0)),
                     )
                 )
             )
@@ -156,10 +160,8 @@ fun main() {
         // find correlating edges, in both directions for ease of mapping / filtering
         val bidirectionalEdgePairs = mappings
             .flatMap {
-                listOf(it.topLeft, it.topRight, it.bottomLeft, it.bottomRight).flatMap { corner0 ->
-                    listOf(it.topLeft, it.topRight, it.bottomLeft, it.bottomRight)
-                        .filter { corner1 -> distance(corner0.p3, corner1.p3) == 1 }
-                        .map { corner1 -> corner0 to corner1 }
+                cross(it.corners, it.corners).filter { (corner0, corner1) ->
+                    distance(corner0.p3, corner1.p3) == 1   // defines edges exhaustively
                 }
             }
             .groupBy { (corner1, corner2) -> corner1.p3 to corner2.p3 }
